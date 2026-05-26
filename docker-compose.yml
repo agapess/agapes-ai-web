@@ -1,0 +1,52 @@
+version: '3.9'
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    ports:
+      - "${WEB_PORT:-4000}:4000"
+    environment:
+      - PORT=4000
+      - DATABASE_URL=file:/data/db.sqlite
+      - NEXTAUTH_URL=${NEXTAUTH_URL}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - NEXT_PUBLIC_AI_SERVICE_URL=${NEXT_PUBLIC_AI_SERVICE_URL:-http://localhost:4001}
+      - ENCRYPTION_SECRET=${ENCRYPTION_SECRET}
+    volumes:
+      - web_data:/data
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  ai:
+    build:
+      context: .
+      dockerfile: ai/Dockerfile
+    ports:
+      - "${AI_PORT:-4001}:4001"
+    environment:
+      - AI_PORT=4001
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL}
+      - LMSTUDIO_BASE_URL=${LMSTUDIO_BASE_URL}
+      - DEFAULT_PROVIDER=${DEFAULT_PROVIDER:-ollama}
+      - DEFAULT_MODEL=${DEFAULT_MODEL:-llama3.2}
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-6380}:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+volumes:
+  web_data:
+  redis_data:

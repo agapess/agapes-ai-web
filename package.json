@@ -1,0 +1,17 @@
+{
+  "name": "ai-website-builder",
+  "private": true,
+  "pnpm": {
+    "onlyBuiltDependencies": ["better-sqlite3", "esbuild"]
+  },
+  "scripts": {
+    "dev": "concurrently \"pnpm --filter web dev\" \"pnpm --filter ai dev\"",
+    "build": "pnpm --filter shared build && pnpm --filter web build && pnpm --filter ai build",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "typescript": "^5.4.5"
+  }
+}

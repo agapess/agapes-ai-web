@@ -1,0 +1,399 @@
+You are a senior full-stack architect and product engineer.
+
+I want you to build a production-grade AI website builder similar to Lovable, Bolt, V0, or Replit AI Agent, but optimized for self-hosting and local AI models.
+
+The stack must be modern, scalable, modular, and easy to maintain.
+
+==================================================
+PRODUCT GOAL
+==================================================
+
+Build a professional AI-powered website builder where users can:
+
+1. Chat with AI to create websites
+2. See live preview instantly
+3. Edit visually and through AI
+4. Generate sections/components/pages from prompts
+5. Use local LLMs OR cloud providers
+6. Export code
+7. Deploy websites
+8. Collaborate with AI during building
+9. Receive AI suggestions and UX/design improvements automatically
+10. Build responsive modern websites without coding
+
+The UI must feel premium, minimal, modern, and fast.
+
+Reference products:
+- Lovable
+- Bolt.new
+- v0
+- Webflow
+- Framer
+- Replit AI
+- Cursor IDE UX
+
+==================================================
+CRITICAL REQUIREMENTS
+==================================================
+
+The architecture MUST support:
+
+- Local LLMs
+- Ollama
+- LM Studio
+- OpenAI-compatible APIs
+- Claude API
+- OpenAI API
+- Gemini API
+- OpenRouter
+- Custom endpoints
+
+The AI provider layer must be modular and provider-agnostic.
+
+Users should be able to:
+- add provider API keys
+- switch models live
+- use local inference
+- select different models per task
+
+==================================================
+CORE FEATURES
+==================================================
+
+Implement ALL these systems:
+
+--------------------------------------------------
+1. AI CHAT BUILDER
+--------------------------------------------------
+
+A professional chat interface where AI can:
+- generate websites
+- edit sections
+- rewrite content
+- improve UX
+- fix layouts
+- generate animations
+- suggest color palettes
+- improve responsiveness
+- create forms
+- generate landing pages
+- create dashboards
+- create ecommerce layouts
+
+AI should maintain project context memory.
+
+--------------------------------------------------
+2. VISUAL WEBSITE BUILDER
+--------------------------------------------------
+
+Drag-and-drop builder with:
+- section blocks
+- editable text
+- editable images
+- editable layout
+- responsive controls
+- spacing controls
+- typography controls
+- color system
+- component inspector
+- layer panel
+- page tree
+
+Must support:
+- desktop/tablet/mobile preview
+- real-time editing
+- instant rendering
+
+--------------------------------------------------
+3. LIVE PREVIEW SYSTEM
+--------------------------------------------------
+
+Need instant preview while AI edits code.
+
+Requirements:
+- hot reload
+- isolated preview sandbox
+- iframe-based rendering
+- crash recovery
+- error overlay
+- preview logs
+- auto-repair attempts by AI
+
+Use:
+- Vite
+- Sandpack OR custom runtime
+- React live rendering
+
+--------------------------------------------------
+4. AI CODE GENERATION ENGINE
+--------------------------------------------------
+
+AI generates:
+- React components
+- Tailwind layouts
+- animations
+- pages
+- reusable blocks
+
+The system must:
+- validate generated code
+- auto-fix errors
+- run linting
+- prevent infinite loops
+- prevent dangerous code execution
+
+AI should use:
+- structured prompts
+- tool calling
+- memory/context
+- component registry
+- design system awareness
+
+--------------------------------------------------
+5. COMPONENT SYSTEM
+--------------------------------------------------
+
+Create reusable component registry:
+- navbar
+- hero
+- pricing
+- testimonials
+- gallery
+- CTA
+- forms
+- dashboard widgets
+- ecommerce sections
+
+Each component:
+- editable
+- AI-aware
+- responsive
+- themeable
+
+--------------------------------------------------
+6. DESIGN SYSTEM
+--------------------------------------------------
+
+Implement:
+- global theme engine
+- typography presets
+- spacing tokens
+- color palettes
+- dark/light mode
+- animation presets
+
+AI should understand and preserve design consistency.
+
+--------------------------------------------------
+7. MULTI-PAGE PROJECT SYSTEM
+--------------------------------------------------
+
+Support:
+- multiple pages
+- routing
+- layouts
+- SEO metadata
+- assets
+- navigation management
+
+--------------------------------------------------
+8. PROJECT STORAGE
+--------------------------------------------------
+
+Support:
+- local filesystem
+- SQLite/Postgres
+- autosave
+- project history
+- snapshots
+- undo/redo
+
+--------------------------------------------------
+9. AI ASSISTANT FEATURES
+--------------------------------------------------
+
+AI should proactively:
+- suggest improvements
+- detect bad UX
+- improve accessibility
+- optimize mobile design
+- recommend SEO fixes
+- suggest animations
+- improve conversion design
+
+--------------------------------------------------
+10. EXPORT + DEPLOYMENT
+--------------------------------------------------
+
+Allow:
+- export zip
+- GitHub push
+- Vercel deploy
+- Netlify deploy
+- Docker export
+
+Generated projects should be clean production-ready code.
+
+==================================================
+TECH STACK
+==================================================
+
+Frontend:
+- Next.js
+- React
+- TypeScript
+- TailwindCSS
+- shadcn/ui
+- Zustand
+- Framer Motion
+
+Backend:
+- Node.js
+- Express or Next API routes
+
+AI:
+- LangChain OR custom orchestration
+- streaming responses
+- provider abstraction layer
+
+Preview Engine:
+- Sandpack or isolated runtime
+
+Database:
+- SQLite initially
+- easily upgradeable to Postgres
+
+==================================================
+UI/UX REQUIREMENTS
+==================================================
+
+The UI must look world-class:
+- minimal
+- modern
+- smooth animations
+- dark mode first
+- clean spacing
+- professional typography
+
+Layout:
+- left sidebar = pages/components
+- center = live preview
+- right sidebar = properties/settings
+- bottom panel = AI chat
+
+Must feel like:
+- Figma + Cursor + Webflow + Lovable combined
+
+==================================================
+SECURITY REQUIREMENTS
+==================================================
+
+Implement:
+- sandboxed preview
+- no arbitrary server execution
+- rate limiting
+- provider key encryption
+- safe code execution
+- CSP policies
+
+==================================================
+PERFORMANCE REQUIREMENTS
+==================================================
+
+Must support:
+- streaming AI responses
+- incremental rendering
+- lazy loading
+- optimized re-renders
+- scalable architecture
+
+==================================================
+IMPLEMENTATION STRATEGY
+==================================================
+
+DO NOT generate everything at once.
+
+I want phased implementation.
+
+FIRST:
+1. Design the full architecture
+2. Create folder structure
+3. Define systems/modules
+4. Explain data flow
+5. Explain AI orchestration
+6. Explain live preview architecture
+7. Explain provider abstraction system
+
+THEN:
+Implement phase-by-phase.
+
+==================================================
+PHASES
+==================================================
+
+Phase 1:
+Core app shell + layout + live preview
+
+Phase 2:
+AI chat system + provider abstraction
+
+Phase 3:
+Visual builder
+
+Phase 4:
+Component registry
+
+Phase 5:
+AI editing tools
+
+Phase 6:
+Export/deployment
+
+Phase 7:
+Collaboration + advanced features
+
+==================================================
+IMPORTANT CODING RULES
+==================================================
+
+- Write production-quality code only
+- No placeholder fake architecture
+- No simplified toy implementations
+- Use clean scalable patterns
+- Use modular architecture
+- Use TypeScript everywhere
+- Keep components reusable
+- Add comments for complex systems
+- Keep AI systems extensible
+- Separate frontend/backend clearly
+
+==================================================
+LOCAL LLM SUPPORT
+==================================================
+
+Must work with:
+- Ollama
+- LM Studio
+- OpenAI-compatible APIs
+
+Provide:
+- model manager
+- endpoint settings
+- streaming support
+- context window handling
+- retry system
+- provider failover
+
+==================================================
+FINAL REQUIREMENT
+==================================================
+
+Act like a principal engineer building a startup-grade product.
+
+Before coding:
+- analyze architecture deeply
+- identify technical risks
+- propose best solutions
+- explain tradeoffs
+
+Then begin implementation carefully and professionally.
