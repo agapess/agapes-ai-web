@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { signOut } from 'next-auth/react'
+import Link from 'next/link'
 
 interface Project {
   id: string
@@ -43,6 +44,9 @@ export default function DashboardClient({ initialProjects, user }: Props) {
         <h1 className="text-xl font-bold text-foreground">AI Website Builder</h1>
         <div className="flex items-center gap-4">
           <span className="text-sm text-muted-foreground">{user.credits} credits · {user.plan}</span>
+          <Link href="/settings/providers" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+            AI Settings
+          </Link>
           <button
             onClick={() => signOut({ callbackUrl: '/login' })}
             className="text-sm text-muted-foreground hover:text-foreground transition-colors"
