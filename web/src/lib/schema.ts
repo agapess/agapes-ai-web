@@ -119,3 +119,15 @@ export const creditTransactions = sqliteTable('credit_transactions', {
   stripePaymentIntentId: text('stripe_payment_intent_id'),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 })
+
+export const subscriptions = sqliteTable('subscriptions', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().unique().references(() => users.id, { onDelete: 'cascade' }),
+  stripeSubscriptionId: text('stripe_subscription_id').notNull().unique(),
+  stripePriceId: text('stripe_price_id').notNull(),
+  status: text('status', { enum: ['active', 'canceled', 'past_due', 'trialing'] }).notNull().default('active'),
+  currentPeriodEnd: integer('current_period_end', { mode: 'timestamp' }).notNull(),
+  cancelAtPeriodEnd: integer('cancel_at_period_end', { mode: 'boolean' }).notNull().default(false),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+})

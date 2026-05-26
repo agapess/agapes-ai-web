@@ -15,6 +15,13 @@
       "when": 1779764412295,
       "tag": "0001_volatile_lifeguard",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1779769975988,
+      "tag": "0002_fluffy_thena",
+      "breakpoints": true
     }
   ]
 }

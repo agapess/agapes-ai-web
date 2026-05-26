@@ -43,3 +43,26 @@ export function refundCredits(db: DB, userId: string, amount: number, descriptio
     description,
   }).run()
 }
+
+export function grantCredits(
+  db: DB,
+  userId: string,
+  amount: number,
+  type: 'purchase' | 'admin',
+  description: string,
+  stripePaymentIntentId?: string,
+): void {
+  if (amount <= 0) return
+  db.update(schema.users)
+    .set({ credits: sql`${schema.users.credits} + ${amount}` })
+    .where(eq(schema.users.id, userId))
+    .run()
+  db.insert(schema.creditTransactions).values({
+    id: generateId(),
+    userId,
+    amount,
+    type,
+    description,
+    stripePaymentIntentId: stripePaymentIntentId ?? null,
+  }).run()
+}

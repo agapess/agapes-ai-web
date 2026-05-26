@@ -4,7 +4,7 @@ import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import * as schema from '../schema'
-import { hasCredits, deductCredits, refundCredits } from '../credits'
+import { hasCredits, deductCredits, refundCredits, grantCredits } from '../credits'
 import path from 'path'
 
 function testDb() {
@@ -45,5 +45,12 @@ describe('credit gate', () => {
     refundCredits(db, 'u1', 2, 'test refund')
     const user = db.select().from(schema.users).where(eq(schema.users.id, 'u1')).get()
     expect(user?.credits).toBe(9)
+  })
+
+  it('grantCredits increases balance and creates purchase transaction', () => {
+    grantCredits(db, 'u1', 50, 'purchase', 'Starter pack')
+    const user = db.select().from(schema.users).where(eq(schema.users.id, 'u1')).get()
+    // Starting balance was 9 after previous deduct/refund tests; 9+50=59
+    expect(user?.credits).toBe(59)
   })
 })
