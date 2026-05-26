@@ -6,12 +6,28 @@ import { pages, chatSessions } from '@/lib/schema'
 import { and, eq } from 'drizzle-orm'
 import { resolveProvider } from '@/lib/providerResolver'
 import { hasCredits } from '@/lib/credits'
+import { checkRateLimit } from '@/lib/rateLimiter'
 
 const AI_INTERNAL_URL = process.env.AI_SERVICE_INTERNAL_URL ?? 'http://localhost:4001'
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const rateLimit = await checkRateLimit(session.user.id)
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: 'Rate limit exceeded. Please wait before sending another message.' },
+      {
+        status: 429,
+        headers: {
+          'X-RateLimit-Remaining-Minute': String(rateLimit.remainingMinute),
+          'X-RateLimit-Remaining-Hour': String(rateLimit.remainingHour),
+          'Retry-After': '60',
+        },
+      },
+    )
+  }
 
   const body = await req.json() as {
     projectId: string
@@ -33,7 +49,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Insufficient credits' }, { status: 402 })
   }
 
-  // Load chat history
   const chatSession = db.select().from(chatSessions)
     .where(and(eq(chatSessions.projectId, projectId), eq(chatSessions.userId, session.user.id)))
     .get()
@@ -41,7 +56,6 @@ export async function POST(req: NextRequest) {
     ? (chatSession.messages as Array<{ role: 'user' | 'assistant'; content: string }>)
     : []
 
-  // Load project context (home page content)
   const homePage = db.select({ content: pages.content }).from(pages)
     .where(and(eq(pages.projectId, projectId), eq(pages.isHomePage, true)))
     .get()
