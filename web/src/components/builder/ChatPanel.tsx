@@ -25,27 +25,29 @@ export default function ChatPanel() {
     const content = input.trim()
     if (!content || streaming || !project) return
 
+    const newUserMsg = { role: 'user' as const, content, timestamp: Date.now() }
     setInput('')
-    addMessage({ role: 'user', content, timestamp: Date.now() })
+    addMessage(newUserMsg)
     setStreaming(true)
 
     try {
       const res = await fetch('/api/ai/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          projectId: project.id,
-          message: content,
-        }),
+        body: JSON.stringify({ projectId: project.id, message: content }),
       })
 
-      if (!res.ok || !res.body) {
-        finalizeStreamingMessage()
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Stream failed' }))
+        addMessage({ role: 'assistant', content: `Error: ${err.error}`, timestamp: Date.now() })
+        setStreaming(false)
         return
       }
 
-      const reader = res.body.getReader()
+      const creditCost = parseInt(res.headers.get('X-Credit-Cost') ?? '0', 10)
+      const reader = res.body!.getReader()
       const decoder = new TextDecoder()
+      let success = false
 
       while (true) {
         const { done, value } = await reader.read()
@@ -62,14 +64,33 @@ export default function ChatPanel() {
               appendStreamingContent(event.content)
             } else if (event.type === 'preview_update') {
               setPreviewCode(event.code)
-            } else if (event.type === 'done' || event.type === 'error') {
+            } else if (event.type === 'done') {
+              success = true
+              finalizeStreamingMessage()
+            } else if (event.type === 'error') {
               finalizeStreamingMessage()
             }
-          } catch {
-            // skip malformed
-          }
+          } catch { /* skip malformed */ }
         }
       }
+
+      // Deduct credits after successful stream (fire and forget)
+      if (success && creditCost > 0) {
+        fetch('/api/ai/complete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ creditCost, description: `AI generation for project ${project.id}` }),
+        }).catch(() => {})
+      }
+
+      // Save chat session (fire and forget)
+      const updatedMessages = [...messages, newUserMsg]
+      fetch(`/api/chat-sessions/${project.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: updatedMessages }),
+      }).catch(() => {})
+
     } catch {
       finalizeStreamingMessage()
     }
