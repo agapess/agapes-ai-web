@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { signOut } from 'next-auth/react'
 import Link from 'next/link'
+import TemplateGallery from './TemplateGallery'
 
 interface Project {
   id: string
@@ -21,6 +22,7 @@ export default function DashboardClient({ initialProjects, user }: Props) {
   const [projects, setProjects] = useState(initialProjects)
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
+  const [showTemplates, setShowTemplates] = useState(false)
 
   async function createProject() {
     if (!newName.trim()) return
@@ -43,6 +45,12 @@ export default function DashboardClient({ initialProjects, user }: Props) {
       <header className="border-b border-border px-6 py-4 flex items-center justify-between">
         <h1 className="text-xl font-bold text-foreground">AI Website Builder</h1>
         <div className="flex items-center gap-4">
+          <button
+            onClick={() => setShowTemplates(true)}
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Browse Templates
+          </button>
           <span className="text-sm text-muted-foreground">{user.credits} credits · {user.plan}</span>
           <Link href="/settings/providers" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
             AI Settings
@@ -100,6 +108,7 @@ export default function DashboardClient({ initialProjects, user }: Props) {
           </div>
         )}
       </main>
+      {showTemplates && <TemplateGallery onClose={() => setShowTemplates(false)} />}
     </div>
   )
 }

@@ -131,3 +131,16 @@ export const subscriptions = sqliteTable('subscriptions', {
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 })
+
+export const templates = sqliteTable('templates', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description'),
+  category: text('category', { enum: ['landing', 'saas', 'portfolio', 'ecommerce', 'dashboard', 'other'] }).notNull().default('other'),
+  previewCode: text('preview_code').notNull().default(''),
+  pagesSnapshot: text('pages_snapshot', { mode: 'json' }).notNull().default('[]'),
+  createdBy: text('created_by').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  isPublic: integer('is_public', { mode: 'boolean' }).notNull().default(true),
+  usageCount: integer('usage_count').notNull().default(0),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+})
