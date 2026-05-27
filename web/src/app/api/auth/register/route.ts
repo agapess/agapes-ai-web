@@ -26,6 +26,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Email already registered' }, { status: 409 })
   }
 
+  // First user ever becomes admin with 500 starter credits
+  const anyUser = db.select({ id: users.id }).from(users).get()
+  const isFirstUser = !anyUser
+  const role: 'admin' | 'user' = isFirstUser ? 'admin' : 'user'
+  const initialCredits = isFirstUser ? 500 : 50
+
   const passwordHash = await bcrypt.hash(password, 12)
   const id = generateId()
 
@@ -34,7 +40,9 @@ export async function POST(req: NextRequest) {
     email,
     name: name ?? null,
     passwordHash,
+    role,
+    credits: initialCredits,
   }).run()
 
-  return NextResponse.json({ success: true }, { status: 201 })
+  return NextResponse.json({ success: true, isAdmin: isFirstUser }, { status: 201 })
 }

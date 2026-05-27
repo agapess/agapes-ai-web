@@ -1,10 +1,28 @@
 'use client'
 import { useBuilderStore } from '@/store/builderStore'
 import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 
 export default function BuilderHeader() {
   const { project, previewSize, setPreviewSize, credits } = useBuilderStore()
   const router = useRouter()
+  const [exporting, setExporting] = useState(false)
+
+  async function handleExport() {
+    if (!project) return
+    setExporting(true)
+    const res = await fetch(`/api/export/${project.id}`)
+    if (res.ok) {
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${project.slug}-export.zip`
+      a.click()
+      URL.revokeObjectURL(url)
+    }
+    setExporting(false)
+  }
 
   return (
     <header className="h-12 border-b border-border flex items-center px-4 gap-4 bg-card shrink-0">
@@ -39,8 +57,12 @@ export default function BuilderHeader() {
         ))}
       </div>
 
-      <button className="px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-xs font-medium hover:opacity-90 transition-opacity">
-        Publish
+      <button
+        onClick={handleExport}
+        disabled={exporting || !project}
+        className="px-3 py-1.5 bg-secondary text-foreground border border-border rounded-md text-xs font-medium hover:bg-accent disabled:opacity-50 transition-colors"
+      >
+        {exporting ? 'Exporting…' : '↓ Export'}
       </button>
     </header>
   )
