@@ -12,5 +12,7 @@ export const config = {
     '/api/chat-sessions/:path*',
     '/api/ai/:path*',
     '/api/billing/:path*',
+    '/api/pages/:path*',
+    '/api/export/:path*',
   ],
 }
