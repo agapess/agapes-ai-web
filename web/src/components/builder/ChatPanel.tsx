@@ -15,7 +15,7 @@ export default function ChatPanel() {
     appendStreamingContent,
     finalizeStreamingMessage,
   } = useChatStore()
-  const { project, setPreviewCode, credits, setCredits, activePage, updatePageContent } = useBuilderStore()
+  const { project, setPreviewCode, credits, setCredits, activePage, updatePageContent, customInstructions } = useBuilderStore()
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -34,7 +34,7 @@ export default function ChatPanel() {
       const res = await fetch('/api/ai/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId: project.id, message: content }),
+        body: JSON.stringify({ projectId: project.id, message: content, customInstructions: customInstructions || undefined }),
       })
 
       if (!res.ok) {

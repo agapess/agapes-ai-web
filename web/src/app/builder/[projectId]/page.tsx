@@ -35,7 +35,7 @@ export default async function BuilderRoute({ params }: Props) {
 
   return (
     <BuilderPage
-      project={project}
+      project={{ ...project, settings: project.settings as Record<string, unknown> }}
       initialPages={projectPages}
       initialCredits={user?.credits ?? 0}
     />

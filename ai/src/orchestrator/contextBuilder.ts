@@ -2,6 +2,7 @@ interface BuildMessagesOptions {
   userMessage: string
   history: Array<{ role: 'user' | 'assistant'; content: string }>
   projectContext: string | undefined
+  customInstructions: string | undefined
 }
 
 type Message = { role: 'system' | 'user' | 'assistant'; content: string }
@@ -45,10 +46,14 @@ export default function App() {
 \`\`\`
 `
 
-export function buildMessages({ userMessage, history, projectContext }: BuildMessagesOptions): Message[] {
-  const systemContent = projectContext
-    ? `${SYSTEM_PROMPT}\n\nCURRENT PAGE STATE (JSON component tree — use this to understand what's already built):\n${projectContext}`
-    : SYSTEM_PROMPT
+export function buildMessages({ userMessage, history, projectContext, customInstructions }: BuildMessagesOptions): Message[] {
+  let systemContent = SYSTEM_PROMPT
+  if (customInstructions) {
+    systemContent += `\n\nADDITIONAL INSTRUCTIONS FROM USER:\n${customInstructions}`
+  }
+  if (projectContext) {
+    systemContent += `\n\nCURRENT PAGE STATE (JSON component tree — use this to understand what's already built):\n${projectContext}`
+  }
 
   return [
     { role: 'system', content: systemContent },

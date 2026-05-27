@@ -10,6 +10,7 @@ export const updateProjectSchema = z.object({
   description: z.string().max(500).optional(),
   status: z.enum(['draft', 'published']).optional(),
   theme: z.record(z.unknown()).optional(),
+  settings: z.record(z.unknown()).optional(),
 })
 
 export const providerConfigSchema = z.object({
@@ -28,6 +29,7 @@ export const chatRequestSchema = z.object({
   })).optional().default([]),
   providerConfig: providerConfigSchema.optional(),
   projectContext: z.string().optional(),
+  customInstructions: z.string().max(2000).optional(),
 })
 
 export const upsertProviderConfigSchema = z.object({

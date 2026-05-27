@@ -2,8 +2,9 @@
 import { useState } from 'react'
 import ComponentLibrary from './ComponentLibrary'
 import PageManager from './PageManager'
+import ProjectSettingsPanel from './ProjectSettingsPanel'
 
-type Tab = 'components' | 'pages'
+type Tab = 'components' | 'pages' | 'settings'
 
 export default function StylePanel() {
   const [tab, setTab] = useState<Tab>('components')
@@ -11,7 +12,7 @@ export default function StylePanel() {
   return (
     <aside className="w-60 border-l border-border bg-card flex flex-col shrink-0">
       <div className="flex border-b border-border">
-        {(['components', 'pages'] as Tab[]).map(t => (
+        {(['components', 'pages', 'settings'] as Tab[]).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -21,12 +22,14 @@ export default function StylePanel() {
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
-            {t}
+            {t === 'settings' ? '⚙' : t}
           </button>
         ))}
       </div>
       <div className="flex-1 overflow-y-auto p-3">
-        {tab === 'components' ? <ComponentLibrary /> : <PageManager />}
+        {tab === 'components' && <ComponentLibrary />}
+        {tab === 'pages' && <PageManager />}
+        {tab === 'settings' && <ProjectSettingsPanel />}
       </div>
     </aside>
   )

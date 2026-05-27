@@ -9,6 +9,7 @@ export interface OrchestratorRequest {
   history: Array<{ role: 'user' | 'assistant'; content: string }>
   providerConfig?: ProviderConfig
   projectContext?: string
+  customInstructions?: string
 }
 
 function sendEvent(res: Response, data: object) {
@@ -40,6 +41,7 @@ export async function orchestrate(req: OrchestratorRequest, res: Response, maxRe
       userMessage,
       history: req.history,
       projectContext: req.projectContext,
+      customInstructions: req.customInstructions,
     })
 
     let accumulated = ''

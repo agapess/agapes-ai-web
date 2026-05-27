@@ -15,6 +15,7 @@ interface Project {
   name: string
   slug: string
   status: string
+  settings?: Record<string, unknown>
 }
 
 interface BuilderState {
@@ -24,6 +25,9 @@ interface BuilderState {
   previewCode: string
   previewSize: 'desktop' | 'tablet' | 'mobile'
   credits: number
+  customInstructions: string
+  projectSettings: Record<string, unknown>
+  previewTheme: 'dark' | 'light'
   setProject: (project: Project) => void
   setPages: (pages: BuilderPage[]) => void
   setActivePage: (page: BuilderPage) => void
@@ -31,6 +35,9 @@ interface BuilderState {
   setPreviewSize: (size: 'desktop' | 'tablet' | 'mobile') => void
   setCredits: (credits: number) => void
   updatePageContent: (pageId: string, code: string) => void
+  setCustomInstructions: (instructions: string) => void
+  setProjectSettings: (settings: Record<string, unknown>) => void
+  setPreviewTheme: (theme: 'dark' | 'light') => void
 }
 
 export const useBuilderStore = create<BuilderState>((set, get) => ({
@@ -40,6 +47,9 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   previewCode: '',
   previewSize: 'desktop',
   credits: 0,
+  customInstructions: '',
+  projectSettings: {},
+  previewTheme: 'dark',
   setProject: (project) => set({ project }),
   setPages: (pages) => {
     const activePage = get().activePage
@@ -56,4 +66,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
     const pages = get().pages.map(p => p.id === pageId ? { ...p, content: code } : p)
     set({ pages })
   },
+  setCustomInstructions: (customInstructions) => set({ customInstructions }),
+  setProjectSettings: (projectSettings) => set({ projectSettings }),
+  setPreviewTheme: (previewTheme) => set({ previewTheme }),
 }))
