@@ -15,7 +15,7 @@ export default function ChatPanel() {
     appendStreamingContent,
     finalizeStreamingMessage,
   } = useChatStore()
-  const { project, setPreviewCode, credits, setCredits } = useBuilderStore()
+  const { project, setPreviewCode, credits, setCredits, activePage, updatePageContent } = useBuilderStore()
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -64,6 +64,14 @@ export default function ChatPanel() {
               appendStreamingContent(event.content)
             } else if (event.type === 'preview_update') {
               setPreviewCode(event.code)
+              if (activePage && project) {
+                updatePageContent(activePage.id, event.code)
+                fetch(`/api/pages/${project.id}/${activePage.id}`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ content: event.code }),
+                }).catch(() => {})
+              }
             } else if (event.type === 'done') {
               success = true
               finalizeStreamingMessage()
