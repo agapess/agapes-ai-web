@@ -14,5 +14,8 @@ export const config = {
     '/api/billing/:path*',
     '/api/pages/:path*',
     '/api/export/:path*',
+    '/api/deploy/:path*',
+    '/api/users/:path*',
+    '/api/analytics',
   ],
 }

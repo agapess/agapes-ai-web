@@ -16,6 +16,7 @@ export const users = sqliteTable('users', {
   plan: text('plan', { enum: ['free', 'pro', 'enterprise'] }).notNull().default('free'),
   stripeCustomerId: text('stripe_customer_id'),
   passwordHash: text('password_hash'),
+  settings: text('settings', { mode: 'json' }).notNull().default('{}'),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 })
