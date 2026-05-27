@@ -15,7 +15,7 @@ export default function ChatPanel() {
     appendStreamingContent,
     finalizeStreamingMessage,
   } = useChatStore()
-  const { project, setPreviewCode } = useBuilderStore()
+  const { project, setPreviewCode, credits, setCredits } = useBuilderStore()
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -81,6 +81,7 @@ export default function ChatPanel() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ creditCost, description: `AI generation for project ${project.id}` }),
         }).catch(() => {})
+        setCredits(Math.max(0, credits - creditCost))
       }
 
       // Save chat session (fire and forget)

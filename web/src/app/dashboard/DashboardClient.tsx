@@ -47,6 +47,9 @@ export default function DashboardClient({ initialProjects, user }: Props) {
           <Link href="/settings/providers" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
             AI Settings
           </Link>
+          <Link href="/settings/billing" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+            Billing
+          </Link>
           <button
             onClick={() => signOut({ callbackUrl: '/login' })}
             className="text-sm text-muted-foreground hover:text-foreground transition-colors"

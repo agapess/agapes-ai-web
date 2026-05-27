@@ -10,12 +10,18 @@ interface Project {
   status: string
 }
 
-export default function BuilderPage({ project }: { project: Project }) {
-  const setProject = useBuilderStore(s => s.setProject)
+interface Props {
+  project: Project
+  initialCredits: number
+}
+
+export default function BuilderPage({ project, initialCredits }: Props) {
+  const { setProject, setCredits } = useBuilderStore()
 
   useEffect(() => {
     setProject(project)
-  }, [project, setProject])
+    setCredits(initialCredits)
+  }, [project, initialCredits, setProject, setCredits])
 
   return <BuilderLayout />
 }

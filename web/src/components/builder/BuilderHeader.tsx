@@ -3,7 +3,7 @@ import { useBuilderStore } from '@/store/builderStore'
 import { useRouter } from 'next/navigation'
 
 export default function BuilderHeader() {
-  const { project, previewSize, setPreviewSize } = useBuilderStore()
+  const { project, previewSize, setPreviewSize, credits } = useBuilderStore()
   const router = useRouter()
 
   return (
@@ -17,6 +17,10 @@ export default function BuilderHeader() {
 
       <span className="text-foreground font-medium text-sm truncate flex-1">
         {project?.name ?? 'Loading…'}
+      </span>
+
+      <span className="text-xs text-muted-foreground">
+        {credits} credits
       </span>
 
       <div className="flex items-center gap-1 bg-secondary rounded-md p-1">

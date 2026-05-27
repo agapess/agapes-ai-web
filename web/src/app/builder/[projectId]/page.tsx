@@ -2,7 +2,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { db } from '@/lib/db'
-import { projects } from '@/lib/schema'
+import { projects, users } from '@/lib/schema'
 import { and, eq } from 'drizzle-orm'
 import BuilderPage from './BuilderPage'
 
@@ -23,5 +23,9 @@ export default async function BuilderRoute({ params }: Props) {
 
   if (!project) redirect('/dashboard')
 
-  return <BuilderPage project={project} />
+  const user = db.select({ credits: users.credits }).from(users)
+    .where(eq(users.id, session.user.id))
+    .get()
+
+  return <BuilderPage project={project} initialCredits={user?.credits ?? 0} />
 }
