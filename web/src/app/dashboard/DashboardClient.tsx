@@ -24,6 +24,12 @@ export default function DashboardClient({ initialProjects, user }: Props) {
   const [newName, setNewName] = useState('')
   const [showTemplates, setShowTemplates] = useState(false)
 
+  async function deleteProject(id: string, name: string) {
+    if (!confirm(`Delete "${name}"? This cannot be undone.`)) return
+    await fetch(`/api/projects/${id}`, { method: 'DELETE' })
+    setProjects(prev => prev.filter(p => p.id !== id))
+  }
+
   async function createProject() {
     if (!newName.trim()) return
     setCreating(true)
@@ -105,9 +111,16 @@ export default function DashboardClient({ initialProjects, user }: Props) {
               <div
                 key={project.id}
                 onClick={() => router.push(`/builder/${project.id}`)}
-                className="p-4 bg-card border border-border rounded-lg cursor-pointer hover:border-primary/50 transition-colors"
+                className="relative p-4 bg-card border border-border rounded-lg cursor-pointer hover:border-primary/50 transition-colors group"
               >
-                <h3 className="font-medium text-foreground">{project.name}</h3>
+                <button
+                  onClick={e => { e.stopPropagation(); deleteProject(project.id, project.name) }}
+                  className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-red-400 transition-all text-xs px-1.5 py-0.5 rounded hover:bg-red-400/10"
+                  title="Delete project"
+                >
+                  ✕
+                </button>
+                <h3 className="font-medium text-foreground pr-6">{project.name}</h3>
                 <p className="text-xs text-muted-foreground mt-1">{project.status}</p>
               </div>
             ))}
