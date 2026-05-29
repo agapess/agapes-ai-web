@@ -75,14 +75,27 @@ export async function POST(req: NextRequest) {
     customInstructions,
   }
 
-  const aiRes = await fetch(`${AI_INTERNAL_URL}/api/chat/stream`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(aiRequest),
-  })
+  let aiRes: Response
+  try {
+    aiRes = await fetch(`${AI_INTERNAL_URL}/api/chat/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(aiRequest),
+    })
+  } catch (err) {
+    return NextResponse.json(
+      { error: `Cannot reach AI service at ${AI_INTERNAL_URL}. Make sure the AI service is running (pnpm dev).` },
+      { status: 502 },
+    )
+  }
 
   if (!aiRes.ok || !aiRes.body) {
-    return NextResponse.json({ error: 'AI service error' }, { status: 502 })
+    let detail = ''
+    try { detail = await aiRes.text() } catch { /* ignore */ }
+    return NextResponse.json(
+      { error: `AI service error (${aiRes.status})${detail ? ': ' + detail : ''}` },
+      { status: 502 },
+    )
   }
 
   return new NextResponse(aiRes.body, {

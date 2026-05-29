@@ -73,11 +73,11 @@ export default function PreviewPanel() {
         </div>
       </div>
 
-      {/* Preview */}
-      <div className="flex-1 overflow-hidden flex items-stretch justify-center min-h-0">
+      {/* Preview — use absolute positioning so Sandpack gets real pixel dimensions */}
+      <div className="flex-1 relative min-h-0 overflow-hidden flex justify-center">
         <div
-          className="h-full flex flex-col transition-all duration-300"
-          style={{ width: fullscreen ? '100%' : PREVIEW_WIDTHS[previewSize] }}
+          className="absolute inset-0 transition-all duration-300 mx-auto"
+          style={{ width: fullscreen ? '100%' : PREVIEW_WIDTHS[previewSize], maxWidth: '100%' }}
         >
           <SandpackProvider
             template="react"
@@ -85,15 +85,15 @@ export default function PreviewPanel() {
             files={{ '/App.js': code }}
             options={{ externalResources: ['https://cdn.tailwindcss.com'] }}
           >
-            <SandpackLayout style={{ height: '100%', borderRadius: 0, flexDirection: 'column' }}>
+            <SandpackLayout style={{ height: '100%', borderRadius: 0 }}>
               {activeTab === 'preview' ? (
                 <SandpackPreview
-                  style={{ flex: 1, height: '100%' }}
+                  style={{ height: '100%' }}
                   showOpenInCodeSandbox={false}
                   showNavigator={false}
                 />
               ) : (
-                <SandpackCodeEditor style={{ flex: 1, height: '100%' }} showLineNumbers />
+                <SandpackCodeEditor style={{ height: '100%' }} showLineNumbers />
               )}
             </SandpackLayout>
           </SandpackProvider>
