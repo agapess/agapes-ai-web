@@ -28,6 +28,8 @@ interface BuilderState {
   customInstructions: string
   projectSettings: Record<string, unknown>
   previewTheme: 'dark' | 'light'
+  /** Controls which tab is shown in PreviewPanel — can be flipped externally (e.g. auto-switch after AI build) */
+  activePreviewTab: 'preview' | 'code'
   setProject: (project: Project) => void
   setPages: (pages: BuilderPage[]) => void
   setActivePage: (page: BuilderPage) => void
@@ -38,6 +40,7 @@ interface BuilderState {
   setCustomInstructions: (instructions: string) => void
   setProjectSettings: (settings: Record<string, unknown>) => void
   setPreviewTheme: (theme: 'dark' | 'light') => void
+  setActivePreviewTab: (tab: 'preview' | 'code') => void
 }
 
 export const useBuilderStore = create<BuilderState>((set, get) => ({
@@ -50,6 +53,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   customInstructions: '',
   projectSettings: {},
   previewTheme: 'dark',
+  activePreviewTab: 'preview',
   setProject: (project) => set({ project }),
   setPages: (pages) => {
     const activePage = get().activePage
@@ -58,7 +62,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
       activePage: activePage ?? pages.find(p => p.isHomePage) ?? pages[0] ?? null,
     })
   },
-  setActivePage: (page) => set({ activePage: page, previewCode: page.content || '' }),
+  setActivePage: (page) => set({ activePage: page, previewCode: typeof page.content === 'string' ? page.content : '' }),
   setPreviewCode: (previewCode) => set({ previewCode }),
   setPreviewSize: (previewSize) => set({ previewSize }),
   setCredits: (credits) => set({ credits }),
@@ -69,4 +73,5 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   setCustomInstructions: (customInstructions) => set({ customInstructions }),
   setProjectSettings: (projectSettings) => set({ projectSettings }),
   setPreviewTheme: (previewTheme) => set({ previewTheme }),
+  setActivePreviewTab: (activePreviewTab) => set({ activePreviewTab }),
 }))

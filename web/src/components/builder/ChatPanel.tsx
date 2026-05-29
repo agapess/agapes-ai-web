@@ -89,19 +89,34 @@ export default function ChatPanel() {
     finalizeStreamingMessage,
     setBuildPhase,
   } = useChatStore()
-  const { project, setPreviewCode, credits, setCredits, activePage, updatePageContent, customInstructions } = useBuilderStore()
+  const { project, setPreviewCode, credits, setCredits, activePage, updatePageContent, customInstructions, setActivePreviewTab } = useBuilderStore()
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, streamingContent, buildPhase])
 
-  async function sendMessage() {
-    const content = input.trim()
+  // Listen for quick-edit events dispatched by PreviewPanel's toolbar
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { prompt } = (e as CustomEvent<{ prompt: string }>).detail
+      if (prompt && !streaming) {
+        addMessage({ role: 'user' as const, content: prompt, timestamp: Date.now() })
+        sendMessageText(prompt)
+      }
+    }
+    window.addEventListener('quick-edit', handler)
+    return () => window.removeEventListener('quick-edit', handler)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streaming])
+
+  /** Core send function — accepts an explicit prompt or falls back to the textarea value */
+  async function sendMessageText(overrideContent?: string) {
+    const content = (overrideContent ?? input).trim()
     if (!content || streaming || !project) return
 
+    if (!overrideContent) setInput('')
     const newUserMsg = { role: 'user' as const, content, timestamp: Date.now() }
-    setInput('')
-    addMessage(newUserMsg)
+    if (!overrideContent) addMessage(newUserMsg) // quick-edit already added the message
     setStreaming(true)
     setBuildPhase('thinking')
 
@@ -145,6 +160,7 @@ export default function ChatPanel() {
               lastGeneratedCode = event.code
               setBuildPhase('building')
               setPreviewCode(event.code)
+              setActivePreviewTab('preview') // auto-switch to preview tab
               if (activePage && project) {
                 updatePageContent(activePage.id, event.code)
                 fetch(`/api/pages/${project.id}/${activePage.id}`, {
@@ -183,6 +199,10 @@ export default function ChatPanel() {
     } catch {
       finalizeStreamingMessage()
     }
+  }
+
+  function sendMessage() {
+    sendMessageText()
   }
 
   // While streaming: show the non-code portion of accumulated text live

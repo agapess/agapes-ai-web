@@ -6,7 +6,7 @@ import {
   SandpackCodeEditor,
 } from '@codesandbox/sandpack-react'
 import { useBuilderStore } from '@/store/builderStore'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 
 const DEFAULT_CODE = `export default function App() {
   return (
@@ -25,21 +25,46 @@ const PREVIEW_WIDTHS = {
   mobile: '375px',
 }
 
+// ── Quick-edit tool definitions ────────────────────────────────────────────────
+const QUICK_EDITS = [
+  { label: 'Darker bg', prompt: 'Make the background darker and more dramatic' },
+  { label: 'Lighter bg', prompt: 'Make the background lighter and cleaner' },
+  { label: 'Add animation', prompt: 'Add smooth fade-in and hover animations' },
+  { label: 'Rounded corners', prompt: 'Make all cards and buttons more rounded' },
+  { label: 'Add shadow', prompt: 'Add subtle drop shadows to cards and sections' },
+  { label: 'Bigger text', prompt: 'Increase heading font sizes and improve typography' },
+  { label: 'More spacing', prompt: 'Add more padding and spacing between sections' },
+  { label: 'Add gradient', prompt: 'Add beautiful gradient backgrounds and text effects' },
+]
+
 export default function PreviewPanel() {
-  const { previewCode, previewSize, previewTheme, setPreviewTheme } = useBuilderStore()
-  const [activeTab, setActiveTab] = useState<'preview' | 'code'>('preview')
+  const {
+    previewCode,
+    previewSize,
+    previewTheme,
+    setPreviewTheme,
+    activePreviewTab,
+    setActivePreviewTab,
+    setPreviewSize,
+  } = useBuilderStore()
   const [fullscreen, setFullscreen] = useState(false)
   const [containerHeight, setContainerHeight] = useState(0)
+  const [showQuickEdit, setShowQuickEdit] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
-  const code = previewCode || DEFAULT_CODE
+
+  // Guard: page.content defaults to [] (JSON array) on new pages — always use a string
+  const code = typeof previewCode === 'string' && previewCode.trim() ? previewCode : DEFAULT_CODE
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && fullscreen) setFullscreen(false)
+      if (e.key === 'Escape') {
+        if (fullscreen) setFullscreen(false)
+        if (showQuickEdit) setShowQuickEdit(false)
+      }
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [fullscreen])
+  }, [fullscreen, showQuickEdit])
 
   // Measure the real pixel height of the container so Sandpack gets an explicit px value
   useEffect(() => {
@@ -55,23 +80,83 @@ export default function PreviewPanel() {
 
   const sandpackHeight = containerHeight > 0 ? `${containerHeight}px` : '100%'
 
+  // Send a quick-edit prompt via the chat store mechanism
+  const applyQuickEdit = useCallback((prompt: string) => {
+    setShowQuickEdit(false)
+    // Dispatch a custom event that ChatPanel listens for
+    window.dispatchEvent(new CustomEvent('quick-edit', { detail: { prompt } }))
+  }, [])
+
   return (
     <div className={`flex flex-col bg-zinc-950 overflow-hidden ${fullscreen ? 'fixed inset-0 z-50' : 'flex-1'}`}>
-      {/* Tab bar */}
-      <div className="flex items-center gap-1 px-4 py-2 border-b border-border bg-card shrink-0">
+      {/* Tab bar + device controls */}
+      <div className="flex items-center gap-1 px-3 py-2 border-b border-border bg-card shrink-0">
+        {/* Preview / Code tabs */}
         {(['preview', 'code'] as const).map(tab => (
           <button
             key={tab}
-            onClick={() => setActiveTab(tab)}
+            onClick={() => setActivePreviewTab(tab)}
             className={`px-3 py-1 text-xs rounded font-medium transition-colors ${
-              activeTab === tab ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+              activePreviewTab === tab ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             {tab === 'preview' ? 'Preview' : 'Code'}
           </button>
         ))}
 
+        {/* Device size */}
+        {activePreviewTab === 'preview' && (
+          <div className="flex items-center gap-0.5 ml-2">
+            {([
+              { key: 'desktop', icon: '🖥' },
+              { key: 'tablet', icon: '📱' },
+              { key: 'mobile', icon: '📲' },
+            ] as const).map(({ key, icon }) => (
+              <button
+                key={key}
+                onClick={() => setPreviewSize(key)}
+                title={key}
+                className={`px-1.5 py-0.5 text-xs rounded transition-colors ${
+                  previewSize === key ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {icon}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Right side controls */}
         <div className="ml-auto flex items-center gap-1">
+          {/* Quick edit button */}
+          {activePreviewTab === 'preview' && (
+            <div className="relative">
+              <button
+                onClick={() => setShowQuickEdit(o => !o)}
+                title="Quick style edits"
+                className={`px-2 py-1 text-xs rounded transition-colors ${
+                  showQuickEdit ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
+                }`}
+              >
+                ✏️ Edit
+              </button>
+              {showQuickEdit && (
+                <div className="absolute right-0 top-full mt-1 w-44 bg-card border border-border rounded-lg shadow-xl z-20 overflow-hidden">
+                  <p className="px-3 py-2 text-xs text-muted-foreground border-b border-border">Quick style tweaks</p>
+                  {QUICK_EDITS.map(qe => (
+                    <button
+                      key={qe.label}
+                      onClick={() => applyQuickEdit(qe.prompt)}
+                      className="w-full text-left px-3 py-2 text-xs hover:bg-secondary transition-colors text-foreground"
+                    >
+                      {qe.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           <button
             onClick={() => setPreviewTheme(previewTheme === 'dark' ? 'light' : 'dark')}
             title={`Switch to ${previewTheme === 'dark' ? 'light' : 'dark'} mode`}
@@ -106,7 +191,7 @@ export default function PreviewPanel() {
             options={{ externalResources: ['https://cdn.tailwindcss.com'] }}
           >
             <SandpackLayout style={{ height: sandpackHeight, borderRadius: 0 }}>
-              {activeTab === 'preview' ? (
+              {activePreviewTab === 'preview' ? (
                 <SandpackPreview
                   style={{ height: sandpackHeight }}
                   showOpenInCodeSandbox={false}

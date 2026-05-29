@@ -35,9 +35,10 @@ export async function POST(req: NextRequest, { params }: Params) {
     .where(and(eq(chatSessions.projectId, params.projectId), eq(chatSessions.userId, session.user.id)))
     .get()
 
+  // drizzle mode:'json' columns auto-stringify on write — don't double-stringify
   if (existing) {
     db.update(chatSessions).set({
-      messages: JSON.stringify(messages),
+      messages: messages as unknown as string,
       provider: provider ?? existing.provider,
       model: model ?? existing.model,
       updatedAt: new Date(),
@@ -47,7 +48,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       id: generateId(),
       projectId: params.projectId,
       userId: session.user.id,
-      messages: JSON.stringify(messages),
+      messages: messages as unknown as string,
       provider: provider ?? null,
       model: model ?? null,
     }).run()

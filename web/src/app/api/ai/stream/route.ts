@@ -52,9 +52,16 @@ export async function POST(req: NextRequest) {
   const chatSession = db.select().from(chatSessions)
     .where(and(eq(chatSessions.projectId, projectId), eq(chatSessions.userId, session.user.id)))
     .get()
-  const history = chatSession
-    ? (chatSession.messages as Array<{ role: 'user' | 'assistant'; content: string }>)
-    : []
+  // messages may be a JSON string if it was double-serialised; parse defensively
+  let history: Array<{ role: 'user' | 'assistant'; content: string }> = []
+  if (chatSession?.messages) {
+    const raw = chatSession.messages as unknown
+    history = Array.isArray(raw)
+      ? (raw as Array<{ role: 'user' | 'assistant'; content: string }>)
+      : typeof raw === 'string'
+        ? (() => { try { return JSON.parse(raw) } catch { return [] } })()
+        : []
+  }
 
   const homePage = db.select({ content: pages.content }).from(pages)
     .where(and(eq(pages.projectId, projectId), eq(pages.isHomePage, true)))
