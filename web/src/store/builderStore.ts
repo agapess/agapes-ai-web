@@ -56,13 +56,23 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   activePreviewTab: 'preview',
   setProject: (project) => set({ project }),
   setPages: (pages) => {
-    const activePage = get().activePage
-    set({
-      pages,
-      activePage: activePage ?? pages.find(p => p.isHomePage) ?? pages[0] ?? null,
-    })
+    // Normalise all page content to strings so downstream code never sees [] or null
+    const normPages = pages.map(p => ({
+      ...p,
+      content: typeof p.content === 'string' ? p.content : '',
+    }))
+    const currentActive = get().activePage
+    // Keep active page reference current if it's already in the new list
+    const newActive = currentActive
+      ? (normPages.find(p => p.id === currentActive.id) ?? normPages.find(p => p.isHomePage) ?? normPages[0] ?? null)
+      : (normPages.find(p => p.isHomePage) ?? normPages[0] ?? null)
+    set({ pages: normPages, activePage: newActive })
+    // Don't touch previewCode here — callers that want to switch preview call setActivePage
   },
-  setActivePage: (page) => set({ activePage: page, previewCode: typeof page.content === 'string' ? page.content : '' }),
+  setActivePage: (page) => {
+    const content = typeof page.content === 'string' ? page.content : ''
+    set({ activePage: page, previewCode: content })
+  },
   setPreviewCode: (previewCode) => set({ previewCode }),
   setPreviewSize: (previewSize) => set({ previewSize }),
   setCredits: (credits) => set({ credits }),

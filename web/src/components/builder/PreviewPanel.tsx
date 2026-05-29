@@ -8,16 +8,27 @@ import {
 import { useBuilderStore } from '@/store/builderStore'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 
-const DEFAULT_CODE = `export default function App() {
+// A valid minimal React component — used as the Sandpack file content.
+// MUST always be a string that exports a default React component.
+const STARTER_CODE = `export default function App() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-900 to-purple-900 flex items-center justify-center">
-      <div className="text-center text-white px-6">
-        <h1 className="text-5xl font-bold mb-4">Your website starts here</h1>
-        <p className="text-purple-200 text-lg">Chat with AI to build your website. Your live preview will appear here.</p>
+    <div style={{minHeight:'100vh',background:'linear-gradient(135deg,#1e1b4b 0%,#4c1d95 100%)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+      <div style={{textAlign:'center',color:'white',padding:'0 24px'}}>
+        <div style={{fontSize:'48px',marginBottom:'16px'}}>✦</div>
+        <h1 style={{fontSize:'36px',fontWeight:'bold',marginBottom:'12px'}}>Start building</h1>
+        <p style={{color:'#c4b5fd',fontSize:'16px',maxWidth:'360px',margin:'0 auto'}}>Describe your website in the chat and AI will build it for you.</p>
       </div>
     </div>
   )
 }`
+
+/** Returns true only when the string looks like a valid React component source */
+function isValidCode(s: unknown): s is string {
+  if (typeof s !== 'string') return false
+  const trimmed = s.trim()
+  // Must contain an export default function/class/arrow
+  return trimmed.length > 20 && /export\s+default/.test(trimmed)
+}
 
 const PREVIEW_WIDTHS = {
   desktop: '100%',
@@ -193,8 +204,10 @@ export default function PreviewPanel() {
   const [editTab, setEditTab] = useState<'text' | 'styles'>('text')
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // Guard: page.content defaults to [] (JSON array) on new pages
-  const code = typeof previewCode === 'string' && previewCode.trim() ? previewCode : DEFAULT_CODE
+  // Only pass real component code to Sandpack. Anything invalid → STARTER_CODE.
+  // This prevents the "Element type is invalid: got object" crash inside the iframe
+  // that happens when previewCode is '', '[]', or an array (drizzle mode:json default).
+  const code = isValidCode(previewCode) ? previewCode : STARTER_CODE
 
   // Derive text entries from current code
   const textEntries = useMemo(() => extractTaggedTexts(code), [code])
