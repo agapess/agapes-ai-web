@@ -38,7 +38,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   db.update(pages).set({
     ...(parsed.data.name ? { name: parsed.data.name } : {}),
-    ...(parsed.data.content !== undefined ? { content: parsed.data.content as unknown as [] } : {}),
+    // content is a mode:'json' column but we store JSX source strings,
+    // so we cast via unknown to satisfy drizzle's type while keeping the raw string
+    ...(parsed.data.content !== undefined ? { content: parsed.data.content as unknown as string } : {}),
     ...(parsed.data.seoTitle !== undefined ? { seoTitle: parsed.data.seoTitle } : {}),
     ...(parsed.data.seoDescription !== undefined ? { seoDescription: parsed.data.seoDescription } : {}),
     updatedAt: new Date(),

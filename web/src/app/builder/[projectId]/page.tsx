@@ -6,6 +6,9 @@ import { projects, pages, users } from '@/lib/schema'
 import { and, eq } from 'drizzle-orm'
 import BuilderPage from './BuilderPage'
 
+// Always fetch fresh data — never serve a cached builder page
+export const dynamic = 'force-dynamic'
+
 interface Props {
   params: { projectId: string }
 }
@@ -26,6 +29,7 @@ export default async function BuilderRoute({ params }: Props) {
     .sort((a, b) => a.order - b.order)
     .map(p => ({
       ...p,
+      // Normalise content: drizzle mode:json defaults to [] for new pages
       content: typeof p.content === 'string' ? p.content : '',
     }))
 
@@ -34,7 +38,10 @@ export default async function BuilderRoute({ params }: Props) {
     .get()
 
   return (
+    // Key on projectId forces a full React tree remount when switching projects.
+    // This ensures Sandpack, the chat panel, and all stores start completely fresh.
     <BuilderPage
+      key={params.projectId}
       project={{ ...project, settings: project.settings as Record<string, unknown> }}
       initialPages={projectPages}
       initialCredits={user?.credits ?? 0}
