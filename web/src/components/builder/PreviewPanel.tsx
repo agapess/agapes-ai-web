@@ -6,7 +6,7 @@ import {
   SandpackCodeEditor,
 } from '@codesandbox/sandpack-react'
 import { useBuilderStore } from '@/store/builderStore'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 const DEFAULT_CODE = `export default function App() {
   return (
@@ -29,6 +29,8 @@ export default function PreviewPanel() {
   const { previewCode, previewSize, previewTheme, setPreviewTheme } = useBuilderStore()
   const [activeTab, setActiveTab] = useState<'preview' | 'code'>('preview')
   const [fullscreen, setFullscreen] = useState(false)
+  const [containerHeight, setContainerHeight] = useState(0)
+  const containerRef = useRef<HTMLDivElement>(null)
   const code = previewCode || DEFAULT_CODE
 
   useEffect(() => {
@@ -38,6 +40,20 @@ export default function PreviewPanel() {
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
   }, [fullscreen])
+
+  // Measure the real pixel height of the container so Sandpack gets an explicit px value
+  useEffect(() => {
+    if (!containerRef.current) return
+    const ro = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        setContainerHeight(entry.contentRect.height)
+      }
+    })
+    ro.observe(containerRef.current)
+    return () => ro.disconnect()
+  }, [])
+
+  const sandpackHeight = containerHeight > 0 ? `${containerHeight}px` : '100%'
 
   return (
     <div className={`flex flex-col bg-zinc-950 overflow-hidden ${fullscreen ? 'fixed inset-0 z-50' : 'flex-1'}`}>
@@ -73,11 +89,15 @@ export default function PreviewPanel() {
         </div>
       </div>
 
-      {/* Preview — use absolute positioning so Sandpack gets real pixel dimensions */}
-      <div className="flex-1 relative min-h-0 overflow-hidden flex justify-center">
+      {/* Measured container — ResizeObserver reads its real pixel height */}
+      <div ref={containerRef} className="flex-1 min-h-0 overflow-hidden flex justify-center">
         <div
-          className="absolute inset-0 transition-all duration-300 mx-auto"
-          style={{ width: fullscreen ? '100%' : PREVIEW_WIDTHS[previewSize], maxWidth: '100%' }}
+          className="transition-all duration-300"
+          style={{
+            width: fullscreen ? '100%' : PREVIEW_WIDTHS[previewSize],
+            maxWidth: '100%',
+            height: sandpackHeight,
+          }}
         >
           <SandpackProvider
             template="react"
@@ -85,15 +105,15 @@ export default function PreviewPanel() {
             files={{ '/App.js': code }}
             options={{ externalResources: ['https://cdn.tailwindcss.com'] }}
           >
-            <SandpackLayout style={{ height: '100%', borderRadius: 0 }}>
+            <SandpackLayout style={{ height: sandpackHeight, borderRadius: 0 }}>
               {activeTab === 'preview' ? (
                 <SandpackPreview
-                  style={{ height: '100%' }}
+                  style={{ height: sandpackHeight }}
                   showOpenInCodeSandbox={false}
                   showNavigator={false}
                 />
               ) : (
-                <SandpackCodeEditor style={{ height: '100%' }} showLineNumbers />
+                <SandpackCodeEditor style={{ height: sandpackHeight }} showLineNumbers />
               )}
             </SandpackLayout>
           </SandpackProvider>

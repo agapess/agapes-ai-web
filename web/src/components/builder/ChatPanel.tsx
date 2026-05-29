@@ -1,8 +1,80 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
-import { useChatStore } from '@/store/chatStore'
+import { useChatStore, type ChatMessage } from '@/store/chatStore'
 import { useBuilderStore } from '@/store/builderStore'
 
+// ── Build phase labels ────────────────────────────────────────────────────────
+const PHASE_LABEL: Record<string, string> = {
+  thinking: '🧠 Planning your website…',
+  building: '⚙️ Building components…',
+  done: '✓ Done',
+}
+
+// ── Single message bubble ─────────────────────────────────────────────────────
+function MessageBubble({ msg }: { msg: ChatMessage }) {
+  const [codeOpen, setCodeOpen] = useState(false)
+
+  if (msg.role === 'user') {
+    return (
+      <div className="flex justify-end">
+        <div className="max-w-[85%] rounded-2xl rounded-tr-sm px-3 py-2 text-sm bg-primary text-primary-foreground">
+          {msg.content}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex justify-start">
+      <div className="max-w-[90%] space-y-1">
+        {msg.content && (
+          <div className="rounded-2xl rounded-tl-sm px-3 py-2 text-sm bg-secondary text-foreground whitespace-pre-wrap">
+            {msg.content}
+          </div>
+        )}
+        {msg.generatedCode && (
+          <div>
+            <button
+              onClick={() => setCodeOpen(o => !o)}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-1"
+            >
+              <span className="text-green-400">▣</span>
+              <span>Code generated</span>
+              <span className="ml-0.5">{codeOpen ? '▲' : '▼'}</span>
+            </button>
+            {codeOpen && (
+              <pre className="mt-1 text-xs bg-zinc-900 text-zinc-300 rounded-lg px-3 py-2 overflow-x-auto max-h-48">
+                <code>{msg.generatedCode}</code>
+              </pre>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Build phase indicator ─────────────────────────────────────────────────────
+function BuildingIndicator({ phase }: { phase: string }) {
+  return (
+    <div className="flex justify-start">
+      <div className="flex items-center gap-2 rounded-2xl rounded-tl-sm px-3 py-2 bg-secondary/60 text-muted-foreground text-sm">
+        <span className="flex gap-1">
+          {[0, 150, 300].map(delay => (
+            <span
+              key={delay}
+              className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce"
+              style={{ animationDelay: `${delay}ms` }}
+            />
+          ))}
+        </span>
+        <span>{PHASE_LABEL[phase] ?? 'Working…'}</span>
+      </div>
+    </div>
+  )
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
 export default function ChatPanel() {
   const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -10,16 +82,18 @@ export default function ChatPanel() {
     messages,
     streaming,
     streamingContent,
+    buildPhase,
     addMessage,
     setStreaming,
     appendStreamingContent,
     finalizeStreamingMessage,
+    setBuildPhase,
   } = useChatStore()
   const { project, setPreviewCode, credits, setCredits, activePage, updatePageContent, customInstructions } = useBuilderStore()
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, streamingContent])
+  }, [messages, streamingContent, buildPhase])
 
   async function sendMessage() {
     const content = input.trim()
@@ -29,6 +103,7 @@ export default function ChatPanel() {
     setInput('')
     addMessage(newUserMsg)
     setStreaming(true)
+    setBuildPhase('thinking')
 
     try {
       const res = await fetch('/api/ai/stream', {
@@ -39,8 +114,9 @@ export default function ChatPanel() {
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: 'Stream failed' }))
-        addMessage({ role: 'assistant', content: `Error: ${err.error}`, timestamp: Date.now() })
+        addMessage({ role: 'assistant', content: `⚠️ ${err.error}`, timestamp: Date.now() })
         setStreaming(false)
+        setBuildPhase('idle')
         return
       }
 
@@ -48,6 +124,7 @@ export default function ChatPanel() {
       const reader = res.body!.getReader()
       const decoder = new TextDecoder()
       let success = false
+      let lastGeneratedCode: string | undefined
 
       while (true) {
         const { done, value } = await reader.read()
@@ -61,8 +138,12 @@ export default function ChatPanel() {
           try {
             const event = JSON.parse(line.slice(6))
             if (event.type === 'text_delta') {
+              // Switch to "building" once we see code starting to arrive
+              if (buildPhase === 'thinking') setBuildPhase('building')
               appendStreamingContent(event.content)
             } else if (event.type === 'preview_update') {
+              lastGeneratedCode = event.code
+              setBuildPhase('building')
               setPreviewCode(event.code)
               if (activePage && project) {
                 updatePageContent(activePage.id, event.code)
@@ -74,7 +155,7 @@ export default function ChatPanel() {
               }
             } else if (event.type === 'done') {
               success = true
-              finalizeStreamingMessage()
+              finalizeStreamingMessage(lastGeneratedCode)
             } else if (event.type === 'error') {
               addMessage({ role: 'assistant', content: `⚠️ ${event.message}`, timestamp: Date.now() })
               finalizeStreamingMessage()
@@ -83,7 +164,6 @@ export default function ChatPanel() {
         }
       }
 
-      // Deduct credits after successful stream (fire and forget)
       if (success && creditCost > 0) {
         fetch('/api/ai/complete', {
           method: 'POST',
@@ -93,7 +173,6 @@ export default function ChatPanel() {
         setCredits(Math.max(0, credits - creditCost))
       }
 
-      // Save chat session (fire and forget)
       const updatedMessages = [...messages, newUserMsg]
       fetch(`/api/chat-sessions/${project.id}`, {
         method: 'POST',
@@ -106,6 +185,14 @@ export default function ChatPanel() {
     }
   }
 
+  // While streaming: show the non-code portion of accumulated text live
+  const liveText = streamingContent
+    ? streamingContent
+        .replace(/```(?:jsx?|tsx?|javascript|typescript)[\s\S]*?```/g, '')
+        .replace(/```(?:jsx?|tsx?|javascript|typescript)[^\n]*\n[\s\S]*/g, '') // partial open block
+        .trim()
+    : ''
+
   return (
     <aside className="w-80 flex flex-col border-r border-border bg-card shrink-0">
       <div className="px-4 py-3 border-b border-border">
@@ -116,47 +203,45 @@ export default function ChatPanel() {
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {messages.length === 0 && !streaming && (
-          <p className="text-muted-foreground text-sm text-center mt-8">
-            Describe the website you want to build…
-          </p>
+          <div className="mt-8 space-y-3 text-center">
+            <p className="text-muted-foreground text-sm">
+              Describe the website you want to build, and I'll plan it out and generate it for you.
+            </p>
+            <div className="flex flex-col gap-2">
+              {[
+                'Landing page for a SaaS startup',
+                'Personal portfolio with dark theme',
+                'E-commerce product showcase',
+              ].map(hint => (
+                <button
+                  key={hint}
+                  onClick={() => setInput(hint)}
+                  className="text-xs text-left px-3 py-2 rounded-lg border border-border hover:border-primary/50 hover:bg-secondary/50 transition-colors text-muted-foreground hover:text-foreground"
+                >
+                  {hint}
+                </button>
+              ))}
+            </div>
+          </div>
         )}
 
         {messages.map((msg, i) => (
-          <div
-            key={i}
-            className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-          >
-            <div
-              className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
-                msg.role === 'user'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-secondary text-foreground'
-              }`}
-            >
-              {msg.content}
-            </div>
-          </div>
+          <MessageBubble key={i} msg={msg} />
         ))}
 
-        {streaming && streamingContent && (
+        {/* Live non-code text while streaming */}
+        {streaming && liveText && (
           <div className="flex justify-start">
-            <div className="max-w-[85%] rounded-lg px-3 py-2 text-sm bg-secondary text-foreground">
-              {streamingContent}
+            <div className="max-w-[90%] rounded-2xl rounded-tl-sm px-3 py-2 text-sm bg-secondary text-foreground whitespace-pre-wrap">
+              {liveText}
               <span className="inline-block w-1 h-4 bg-primary ml-0.5 animate-pulse" />
             </div>
           </div>
         )}
 
-        {streaming && !streamingContent && (
-          <div className="flex justify-start">
-            <div className="px-3 py-2 bg-secondary rounded-lg">
-              <div className="flex gap-1">
-                <div className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <div className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <div className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-              </div>
-            </div>
-          </div>
+        {/* Build phase indicator */}
+        {streaming && buildPhase !== 'idle' && (
+          <BuildingIndicator phase={buildPhase} />
         )}
 
         <div ref={messagesEndRef} />
