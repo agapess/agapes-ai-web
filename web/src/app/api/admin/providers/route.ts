@@ -48,6 +48,14 @@ export async function POST(req: NextRequest) {
   const { provider, displayName, baseUrl, apiKey, model, isDefault, allowedPlans, creditCostPerRequest } = parsed.data
   const id = generateId()
 
+  // If this new provider is marked as default, clear all existing defaults first
+  if (isDefault) {
+    db.update(aiProviderConfigs)
+      .set({ isDefault: false })
+      .where(eq(aiProviderConfigs.scope, 'platform'))
+      .run()
+  }
+
   db.insert(aiProviderConfigs).values({
     id,
     scope: 'platform',

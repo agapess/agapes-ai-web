@@ -155,6 +155,15 @@ export default function AdminProvidersClient() {
     load()
   }
 
+  async function setDefault(id: string) {
+    await fetch(`/api/admin/providers/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isDefault: true }),
+    })
+    load()
+  }
+
   async function remove(id: string) {
     if (!confirm('Delete this provider?')) return
     await fetch(`/api/admin/providers/${id}`, { method: 'DELETE' })
@@ -335,7 +344,7 @@ export default function AdminProvidersClient() {
         ) : (
           <div className="space-y-3">
             {configs.map(cfg => (
-              <div key={cfg.id} className="bg-card border border-border rounded-lg p-4 flex items-center justify-between">
+              <div key={cfg.id} className={`bg-card border rounded-lg p-4 flex items-center justify-between transition-colors ${cfg.isDefault && cfg.isActive ? 'border-primary/60 ring-1 ring-primary/20' : 'border-border'}`}>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-medium text-foreground text-sm">{cfg.displayName}</span>
@@ -356,6 +365,15 @@ export default function AdminProvidersClient() {
                   )}
                 </div>
                 <div className="flex items-center gap-3 ml-4 shrink-0">
+                  {!cfg.isDefault && (
+                    <button
+                      onClick={() => setDefault(cfg.id)}
+                      className="text-xs text-primary hover:opacity-80 transition-opacity font-medium"
+                      title="Make this the default provider for all users"
+                    >
+                      ★ Set Default
+                    </button>
+                  )}
                   <button
                     onClick={() => toggle(cfg.id, cfg.isActive)}
                     className="text-xs text-muted-foreground hover:text-foreground transition-colors"

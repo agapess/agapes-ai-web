@@ -36,6 +36,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     updates.allowedPlans = JSON.stringify(parsed.data.allowedPlans)
   }
 
+  // If setting this provider as default, clear all other platform defaults first
+  if (parsed.data.isDefault === true) {
+    db.update(aiProviderConfigs)
+      .set({ isDefault: false })
+      .where(and(eq(aiProviderConfigs.scope, 'platform'), eq(aiProviderConfigs.isDefault, true)))
+      .run()
+  }
+
   db.update(aiProviderConfigs).set(updates).where(eq(aiProviderConfigs.id, params.id)).run()
   return NextResponse.json({ success: true })
 }
