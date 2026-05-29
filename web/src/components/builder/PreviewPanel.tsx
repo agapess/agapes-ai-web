@@ -74,9 +74,9 @@ export default function PreviewPanel() {
       </div>
 
       {/* Preview */}
-      <div className="flex-1 overflow-hidden flex items-start justify-center pt-4">
+      <div className="flex-1 overflow-hidden flex items-stretch justify-center min-h-0">
         <div
-          className="h-full transition-all duration-300"
+          className="h-full flex flex-col transition-all duration-300"
           style={{ width: fullscreen ? '100%' : PREVIEW_WIDTHS[previewSize] }}
         >
           <SandpackProvider
@@ -85,15 +85,15 @@ export default function PreviewPanel() {
             files={{ '/App.js': code }}
             options={{ externalResources: ['https://cdn.tailwindcss.com'] }}
           >
-            <SandpackLayout style={{ height: '100%', borderRadius: 0 }}>
+            <SandpackLayout style={{ height: '100%', borderRadius: 0, flexDirection: 'column' }}>
               {activeTab === 'preview' ? (
                 <SandpackPreview
-                  style={{ height: '100%' }}
+                  style={{ flex: 1, height: '100%' }}
                   showOpenInCodeSandbox={false}
                   showNavigator={false}
                 />
               ) : (
-                <SandpackCodeEditor style={{ height: '100%' }} showLineNumbers />
+                <SandpackCodeEditor style={{ flex: 1, height: '100%' }} showLineNumbers />
               )}
             </SandpackLayout>
           </SandpackProvider>
