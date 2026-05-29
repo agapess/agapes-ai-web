@@ -41,7 +41,7 @@ export default function BuilderHeader() {
   return (
     <header className="h-12 border-b border-border flex items-center px-4 gap-4 bg-card shrink-0">
       <button
-        onClick={() => router.push('/dashboard')}
+        onClick={() => { router.push('/dashboard'); router.refresh() }}
         className="text-muted-foreground hover:text-foreground transition-colors text-sm"
       >
         ← Dashboard

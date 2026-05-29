@@ -29,55 +29,104 @@ const QUICK_EDITS = [
   { label: 'Darker background', prompt: 'Make the background darker and more dramatic' },
   { label: 'Lighter background', prompt: 'Make the background lighter and cleaner' },
   { label: 'Add animations', prompt: 'Add smooth fade-in and hover animations to elements' },
-  { label: 'More rounded', prompt: 'Make all cards and buttons more rounded' },
-  { label: 'Add shadows', prompt: 'Add subtle drop shadows to cards and sections' },
+  { label: 'More rounded corners', prompt: 'Make all cards and buttons more rounded' },
+  { label: 'Add drop shadows', prompt: 'Add subtle drop shadows to cards and sections' },
   { label: 'Bigger headings', prompt: 'Increase heading font sizes and improve typography hierarchy' },
-  { label: 'More spacing', prompt: 'Add more padding and spacing between sections' },
-  { label: 'Add gradient text', prompt: 'Add beautiful gradient effects to headings and key text' },
+  { label: 'More padding/spacing', prompt: 'Add more padding and spacing between sections' },
+  { label: 'Gradient text effects', prompt: 'Add beautiful gradient effects to headings and key text' },
+  { label: 'Glass morphism', prompt: 'Apply glass morphism effect with backdrop blur to cards' },
+  { label: 'Minimal & clean', prompt: 'Simplify the design to be more minimal, clean, and modern' },
 ]
 
-// ── Extract human-readable text strings from JSX code ────────────────────────
-function extractJsxTexts(code: string): string[] {
+// ── Tag-aware text extraction ─────────────────────────────────────────────────
+interface TextEntry {
+  tag: string      // 'h1', 'h2', 'p', 'button', etc.
+  label: string    // human-readable label for the UI
+  text: string     // current text value
+}
+
+const TAG_LABELS: Record<string, string> = {
+  h1: 'Heading 1',
+  h2: 'Heading 2',
+  h3: 'Heading 3',
+  h4: 'Heading 4',
+  h5: 'Heading 5',
+  h6: 'Heading 6',
+  p: 'Paragraph',
+  button: 'Button',
+  a: 'Link',
+  span: 'Text',
+  li: 'List item',
+  label: 'Label',
+  th: 'Table header',
+  td: 'Table cell',
+  dt: 'Term',
+  dd: 'Description',
+  blockquote: 'Quote',
+  figcaption: 'Caption',
+}
+
+function extractTaggedTexts(code: string): TextEntry[] {
+  const results: TextEntry[] = []
   const seen = new Set<string>()
-  const results: string[] = []
-  // Match text between JSX opening tag close > and closing tag </
-  // Skips expressions {}, class names, pure-whitespace, very short strings
-  const re = />([^<{}\n\r]{2,200}?)</g
-  let m: RegExpExecArray | null
-  while ((m = re.exec(code)) !== null) {
-    const t = m[1].trim()
-    if (
-      t.length >= 2 &&
-      !t.startsWith('//') &&
-      !t.startsWith('*') &&
-      !/^\s*$/.test(t) &&
-      // Skip things that look like code/class names
-      !/^[a-z]+\(/.test(t) &&
-      !seen.has(t)
-    ) {
-      seen.add(t)
-      results.push(t)
+  const tagPattern = Object.keys(TAG_LABELS).join('|')
+
+  // Match <tag ...>text content</tag> where text has no nested JSX tags
+  // Handles multi-class JSX like <h1 className="...">Title</h1>
+  const re = new RegExp(
+    `<(${tagPattern})[^>]*>([^<{}\n\r]{1,300}?)<\\/(?:${tagPattern})>`,
+    'g',
+  )
+
+  // Also match tags where content is text + simple closing tag e.g.:
+  //   <button className="...">Get Started</button>
+  const re2 = new RegExp(
+    `<(${tagPattern})[^>]*>\\s*([^<{}\n\r]{1,300}?)\\s*<\\/(?:${tagPattern})>`,
+    'g',
+  )
+
+  for (const regex of [re, re2]) {
+    regex.lastIndex = 0
+    let m: RegExpExecArray | null
+    while ((m = regex.exec(code)) !== null) {
+      const tag = m[1]
+      const raw = m[2].trim()
+      // Skip empty, pure-whitespace, JSX expressions, or things that look like code
+      if (
+        !raw ||
+        raw.length < 1 ||
+        /^\{/.test(raw) ||
+        /^\d+$/.test(raw) ||
+        /^[A-Z_]+$/.test(raw) ||   // constants
+        seen.has(raw)
+      ) continue
+      seen.add(raw)
+      results.push({
+        tag,
+        label: TAG_LABELS[tag] ?? tag,
+        text: raw,
+      })
     }
   }
+
   return results
 }
 
-// ── Single editable text row ──────────────────────────────────────────────────
+// ── Single editable row ───────────────────────────────────────────────────────
 function TextRow({
-  text,
+  entry,
   onApply,
 }: {
-  text: string
+  entry: TextEntry
   onApply: (oldText: string, newText: string) => void
 }) {
-  const [value, setValue] = useState(text)
-  const savedRef = useRef(text)
+  const [value, setValue] = useState(entry.text)
+  const savedRef = useRef(entry.text)
 
-  // Sync when parent re-derives texts (e.g., after AI update)
   useEffect(() => {
-    setValue(text)
-    savedRef.current = text
-  }, [text])
+    setValue(entry.text)
+    savedRef.current = entry.text
+  }, [entry.text])
 
   function commit() {
     const trimmed = value.trim()
@@ -87,17 +136,38 @@ function TextRow({
     }
   }
 
+  const tagColor: Record<string, string> = {
+    h1: 'text-yellow-400',
+    h2: 'text-amber-400',
+    h3: 'text-orange-400',
+    h4: 'text-orange-300',
+    h5: 'text-orange-200',
+    h6: 'text-orange-100',
+    p: 'text-blue-400',
+    button: 'text-green-400',
+    a: 'text-purple-400',
+    span: 'text-zinc-400',
+  }
+
   return (
-    <input
-      value={value}
-      onChange={e => setValue(e.target.value)}
-      onBlur={commit}
-      onKeyDown={e => {
-        if (e.key === 'Enter') { e.preventDefault(); commit(); e.currentTarget.blur() }
-        if (e.key === 'Escape') { setValue(savedRef.current); e.currentTarget.blur() }
-      }}
-      className="w-full px-2 py-1.5 text-xs bg-secondary border border-border rounded-md text-foreground placeholder-muted-foreground focus:outline-none focus:border-primary transition-colors"
-    />
+    <div className="space-y-1">
+      <div className="flex items-center gap-1.5">
+        <span className={`text-[10px] font-mono font-bold ${tagColor[entry.tag] ?? 'text-muted-foreground'}`}>
+          {`<${entry.tag}>`}
+        </span>
+        <span className="text-[10px] text-muted-foreground">{entry.label}</span>
+      </div>
+      <input
+        value={value}
+        onChange={e => setValue(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e => {
+          if (e.key === 'Enter') { e.preventDefault(); commit(); e.currentTarget.blur() }
+          if (e.key === 'Escape') { setValue(savedRef.current); e.currentTarget.blur() }
+        }}
+        className="w-full px-2 py-1.5 text-xs bg-secondary border border-border rounded-md text-foreground focus:outline-none focus:border-primary transition-colors"
+      />
+    </div>
   )
 }
 
@@ -122,26 +192,12 @@ export default function PreviewPanel() {
   const [showEditPanel, setShowEditPanel] = useState(false)
   const [editTab, setEditTab] = useState<'text' | 'styles'>('text')
   const containerRef = useRef<HTMLDivElement>(null)
-  const editPanelRef = useRef<HTMLDivElement>(null)
 
-  // Guard: page.content defaults to [] (JSON array) on new pages — always use a string
+  // Guard: page.content defaults to [] (JSON array) on new pages
   const code = typeof previewCode === 'string' && previewCode.trim() ? previewCode : DEFAULT_CODE
 
-  // Extract text strings from current JSX code
-  const extractedTexts = useMemo(() => extractJsxTexts(code), [code])
-
-  // ── Close panel on outside click ──────────────────────────────────────────
-  useEffect(() => {
-    if (!showEditPanel) return
-    function handler(e: MouseEvent) {
-      if (editPanelRef.current && !editPanelRef.current.contains(e.target as Node)) {
-        setShowEditPanel(false)
-      }
-    }
-    // Use mousedown so it fires before focus events on inputs
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [showEditPanel])
+  // Derive text entries from current code
+  const textEntries = useMemo(() => extractTaggedTexts(code), [code])
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
   useEffect(() => {
@@ -167,7 +223,7 @@ export default function PreviewPanel() {
 
   const sandpackHeight = containerHeight > 0 ? `${containerHeight}px` : '100%'
 
-  // ── Apply a text replacement to the code ─────────────────────────────────
+  // ── Text edit handler ─────────────────────────────────────────────────────
   const applyTextEdit = useCallback((oldText: string, newText: string) => {
     const escaped = oldText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     const updated = code.replace(new RegExp(escaped, 'g'), newText)
@@ -182,7 +238,7 @@ export default function PreviewPanel() {
     }
   }, [code, setPreviewCode, activePage, project, updatePageContent])
 
-  // ── Send a quick-style prompt to the AI ──────────────────────────────────
+  // ── Quick AI style prompt ─────────────────────────────────────────────────
   const applyQuickStyle = useCallback((prompt: string) => {
     setShowEditPanel(false)
     window.dispatchEvent(new CustomEvent('quick-edit', { detail: { prompt } }))
@@ -192,7 +248,6 @@ export default function PreviewPanel() {
     <div className={`flex flex-col bg-zinc-950 overflow-hidden ${fullscreen ? 'fixed inset-0 z-50' : 'flex-1'}`}>
       {/* ── Toolbar ──────────────────────────────────────────────────────── */}
       <div className="flex items-center gap-1 px-3 py-2 border-b border-border bg-card shrink-0">
-        {/* Preview / Code tabs */}
         {(['preview', 'code'] as const).map(tab => (
           <button
             key={tab}
@@ -207,7 +262,6 @@ export default function PreviewPanel() {
           </button>
         ))}
 
-        {/* Device size toggles */}
         {activePreviewTab === 'preview' && (
           <div className="flex items-center gap-0.5 ml-2 border-l border-border pl-2">
             {([
@@ -229,89 +283,20 @@ export default function PreviewPanel() {
           </div>
         )}
 
-        {/* Right-side controls */}
         <div className="ml-auto flex items-center gap-1">
-          {/* Edit panel toggle — only in preview mode */}
           {activePreviewTab === 'preview' && (
-            <div ref={editPanelRef} className="relative">
-              <button
-                onMouseDown={e => e.stopPropagation()} // prevent doc mousedown from closing before toggle
-                onClick={() => setShowEditPanel(o => !o)}
-                title="Edit content & styles"
-                className={`flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors ${
-                  showEditPanel
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
-                }`}
-              >
-                <span>✏️</span>
-                <span>Edit</span>
-              </button>
-
-              {showEditPanel && (
-                <div className="absolute right-0 top-full mt-1.5 w-80 bg-card border border-border rounded-xl shadow-2xl z-30 overflow-hidden flex flex-col">
-                  {/* Edit panel tabs */}
-                  <div className="flex border-b border-border">
-                    {(['text', 'styles'] as const).map(t => (
-                      <button
-                        key={t}
-                        onMouseDown={e => e.stopPropagation()}
-                        onClick={() => setEditTab(t)}
-                        className={`flex-1 py-2 text-xs font-medium transition-colors ${
-                          editTab === t
-                            ? 'text-foreground border-b-2 border-primary'
-                            : 'text-muted-foreground hover:text-foreground'
-                        }`}
-                      >
-                        {t === 'text' ? '✏️ Edit Text' : '🎨 Quick Styles'}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Text editing tab */}
-                  {editTab === 'text' && (
-                    <div className="flex flex-col max-h-80 overflow-y-auto">
-                      {extractedTexts.length === 0 ? (
-                        <p className="px-4 py-6 text-xs text-muted-foreground text-center">
-                          No editable text found.<br />Ask AI to build something first.
-                        </p>
-                      ) : (
-                        <div className="p-3 space-y-2">
-                          <p className="text-xs text-muted-foreground mb-3">
-                            Click any field to edit. Press Enter or click away to apply.
-                          </p>
-                          {extractedTexts.map((text, i) => (
-                            <div key={`${text}-${i}`}>
-                              <TextRow text={text} onApply={applyTextEdit} />
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Quick styles tab */}
-                  {editTab === 'styles' && (
-                    <div className="flex flex-col max-h-80 overflow-y-auto">
-                      <p className="px-3 pt-3 pb-1 text-xs text-muted-foreground">
-                        Ask AI to apply a style change instantly.
-                      </p>
-                      {QUICK_EDITS.map(qe => (
-                        <button
-                          key={qe.label}
-                          onMouseDown={e => e.stopPropagation()}
-                          onClick={() => applyQuickStyle(qe.prompt)}
-                          className="w-full text-left px-3 py-2.5 text-xs hover:bg-secondary transition-colors text-foreground flex items-center gap-2 group"
-                        >
-                          <span className="w-1.5 h-1.5 rounded-full bg-primary/40 group-hover:bg-primary transition-colors" />
-                          {qe.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+            <button
+              onClick={() => setShowEditPanel(o => !o)}
+              title="Edit content & styles"
+              className={`flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors ${
+                showEditPanel
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
+              }`}
+            >
+              <span>✏️</span>
+              <span>Edit</span>
+            </button>
           )}
 
           <button
@@ -333,7 +318,7 @@ export default function PreviewPanel() {
       </div>
 
       {/* ── Preview / Code area ───────────────────────────────────────────── */}
-      <div ref={containerRef} className="flex-1 min-h-0 overflow-hidden flex justify-center">
+      <div ref={containerRef} className="flex-1 min-h-0 overflow-hidden flex justify-center relative">
         <div
           className="transition-all duration-300"
           style={{
@@ -361,6 +346,100 @@ export default function PreviewPanel() {
             </SandpackLayout>
           </SandpackProvider>
         </div>
+
+        {/* ── Edit panel — rendered inside the preview area so it floats above it
+             A full-size transparent backdrop closes the panel on any outside click,
+             including clicks that land on the Sandpack iframe which blocks
+             document-level mousedown events. ───────────────────────────────── */}
+        {showEditPanel && (
+          <>
+            {/* Backdrop: covers everything behind the panel, including the iframe */}
+            <div
+              className="absolute inset-0 z-10"
+              onClick={() => setShowEditPanel(false)}
+            />
+
+            {/* Panel: positioned top-right, above the backdrop */}
+            <div
+              className="absolute top-2 right-2 z-20 w-80 max-h-[calc(100%-16px)] bg-card border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden"
+              onClick={e => e.stopPropagation()} // don't let panel clicks reach backdrop
+            >
+              {/* Panel header */}
+              <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
+                <span className="text-sm font-semibold text-foreground">Edit Website</span>
+                <button
+                  onClick={() => setShowEditPanel(false)}
+                  className="text-muted-foreground hover:text-foreground transition-colors text-lg leading-none"
+                >
+                  ×
+                </button>
+              </div>
+
+              {/* Tab bar */}
+              <div className="flex border-b border-border shrink-0">
+                {(['text', 'styles'] as const).map(t => (
+                  <button
+                    key={t}
+                    onClick={() => setEditTab(t)}
+                    className={`flex-1 py-2 text-xs font-medium transition-colors ${
+                      editTab === t
+                        ? 'text-foreground border-b-2 border-primary'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {t === 'text' ? '✏️ Edit Text' : '🎨 Quick Styles'}
+                  </button>
+                ))}
+              </div>
+
+              {/* Scrollable content */}
+              <div className="overflow-y-auto flex-1">
+                {/* ── Edit Text tab ─────────────────────────────────────── */}
+                {editTab === 'text' && (
+                  <div className="p-3 space-y-3">
+                    {textEntries.length === 0 ? (
+                      <p className="text-xs text-muted-foreground text-center py-8">
+                        No editable text found.<br />Ask AI to build something first.
+                      </p>
+                    ) : (
+                      <>
+                        <p className="text-xs text-muted-foreground">
+                          Edit any field below. Changes apply instantly to the preview.
+                        </p>
+                        {textEntries.map((entry, i) => (
+                          <TextRow
+                            key={`${entry.tag}-${entry.text.slice(0, 20)}-${i}`}
+                            entry={entry}
+                            onApply={applyTextEdit}
+                          />
+                        ))}
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {/* ── Quick Styles tab ──────────────────────────────────── */}
+                {editTab === 'styles' && (
+                  <div className="py-2">
+                    <p className="px-4 py-2 text-xs text-muted-foreground">
+                      AI applies the change instantly.
+                    </p>
+                    {QUICK_EDITS.map(qe => (
+                      <button
+                        key={qe.label}
+                        onClick={() => applyQuickStyle(qe.prompt)}
+                        className="w-full text-left px-4 py-2.5 text-xs hover:bg-secondary transition-colors text-foreground flex items-center gap-2 group"
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-primary/40 group-hover:bg-primary transition-colors shrink-0" />
+                        {qe.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {fullscreen && (
