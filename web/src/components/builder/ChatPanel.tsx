@@ -76,6 +76,7 @@ export default function ChatPanel() {
               success = true
               finalizeStreamingMessage()
             } else if (event.type === 'error') {
+              addMessage({ role: 'assistant', content: `⚠️ ${event.message}`, timestamp: Date.now() })
               finalizeStreamingMessage()
             }
           } catch { /* skip malformed */ }

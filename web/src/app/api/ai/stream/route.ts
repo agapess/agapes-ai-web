@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
     provider?: string
   }
 
-  const { projectId, message, provider: preferredProvider } = body
+  const { projectId, message, provider: preferredProvider, customInstructions } = body
 
   const resolved = resolveProvider(session.user.id, session.user.plan, preferredProvider)
   if (!resolved) {
@@ -72,6 +72,7 @@ export async function POST(req: NextRequest) {
       model: resolved.model,
     },
     projectContext,
+    customInstructions,
   }
 
   const aiRes = await fetch(`${AI_INTERNAL_URL}/api/chat/stream`, {
