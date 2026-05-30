@@ -6,68 +6,152 @@ import { swapTailwindClass, replaceText } from '@/lib/tailwindMutator'
 // Tags that can meaningfully have a hyperlink set on them
 const LINKABLE_TAGS = ['a', 'button', 'span', 'div', 'li']
 
+// ── Robust character-level tag scanner ───────────────────────────────────────
+
 /**
- * Extract the current href from a JSX element identified by tagName + className.
- * Returns '' if none found.
+ * Given an index pointing at '<' in code, find the index just past the
+ * closing '>' of the opening tag — respecting { } brace nesting so that
+ * JSX expressions like className={x > 0 ? 'a' : 'b'} don't fool us.
  */
-function extractHref(code: string, tagName: string, className: string): string {
-  const escapedClass = className.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  // Look for href="..." near the element
-  const tagRe = new RegExp(`<${tagName}[^>]*className=["']${escapedClass}["'][^>]*>`)
-  const tagMatch = tagRe.exec(code)
-  if (!tagMatch) return ''
-  const tagStr = tagMatch[0]
-  const hrefMatch = tagStr.match(/href=["']([^"']*)["']/)
-  return hrefMatch ? hrefMatch[1] : ''
+function findOpenTagEnd(code: string, tagStart: number): number {
+  let i = tagStart + 1
+  let braceDepth = 0
+  while (i < code.length) {
+    const ch = code[i]
+    if (ch === '{') braceDepth++
+    else if (ch === '}') braceDepth--
+    else if (ch === '>' && braceDepth === 0) return i + 1
+    i++
+  }
+  return code.length
 }
 
 /**
- * Set or replace the href on an <a> element identified by tagName + className.
- * If the element is not an <a>, wraps its content in <a href="...">.
- * For button elements, sets onClick={() => window.open('url','_blank')}.
+ * Find the start index of the first occurrence of a JSX opening tag that
+ * contains className="<literal>". Returns -1 if not found.
+ * Uses a plain string search rather than regex so special chars in className
+ * (like / [ ] etc.) don't need escaping.
  */
-function applyHrefToCode(
-  code: string,
-  tagName: string,
-  className: string,
-  href: string,
-): string {
-  const escapedClass = className.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+function findTagByClass(code: string, tagName: string, className: string): number {
+  // Search for `className="<className>"` or `className='<className>'`
+  const needle1 = `className="${className}"`
+  const needle2 = `className='${className}'`
+
+  for (const needle of [needle1, needle2]) {
+    let pos = code.indexOf(needle)
+    while (pos >= 0) {
+      // Walk back to find the opening '<'
+      let tagStart = pos
+      while (tagStart > 0 && code[tagStart] !== '<') tagStart--
+      // Check the tag name matches
+      const afterLt = code.slice(tagStart + 1)
+      if (afterLt.startsWith(tagName) && /[\s>/]/.test(afterLt[tagName.length])) {
+        return tagStart
+      }
+      pos = code.indexOf(needle, pos + 1)
+    }
+  }
+  return -1
+}
+
+/**
+ * Extract the href value from the opening tag at tagStart.
+ * Returns '' if no href attribute found.
+ */
+function extractHrefFromTag(openTag: string): string {
+  const m = openTag.match(/\bhref=["']([^"']*)["']/)
+  return m ? m[1] : ''
+}
+
+/**
+ * Extract the current href for the element identified by tagName + className.
+ */
+function extractHref(code: string, tagName: string, className: string): string {
+  const tagStart = findTagByClass(code, tagName, className)
+  if (tagStart < 0) return ''
+  const tagEnd = findOpenTagEnd(code, tagStart)
+  const openTag = code.slice(tagStart, tagEnd)
+  return extractHrefFromTag(openTag)
+}
+
+/**
+ * Find the matching closing </tagName> for an element whose opening tag ends at
+ * contentStart, using depth counting across ALL tags (not just same-name).
+ * Returns the index just past the '>' of the closing tag.
+ */
+function findMatchingClose(code: string, contentStart: number): number {
+  let depth = 0
+  let i = contentStart
+  while (i < code.length) {
+    if (code[i] !== '<') { i++; continue }
+    if (code[i + 1] === '/') {
+      if (depth === 0) return code.indexOf('>', i) + 1
+      depth--
+      i = code.indexOf('>', i) + 1
+    } else if (/[A-Za-z]/.test(code[i + 1])) {
+      const gt = findOpenTagEnd(code, i)
+      if (code[gt - 2] !== '/') depth++   // not self-closing
+      i = gt
+    } else {
+      i++
+    }
+  }
+  return code.length
+}
+
+/**
+ * Safely set the href on any JSX element.
+ *
+ * Strategy:
+ *   • <a>   → replace/add href="..." on the opening tag
+ *   • other → wrap the entire element in <a href="...">…</a>
+ *
+ * Uses character-level scanning so nested braces in JSX expressions
+ * (e.g. onClick={() => setState(x => x+1)}) never confuse the parser.
+ */
+function applyHrefToCode(code: string, tagName: string, className: string, href: string): string {
+  const tagStart = findTagByClass(code, tagName, className)
+  if (tagStart < 0) return code   // element not found — leave code unchanged
+
+  const tagEnd = findOpenTagEnd(code, tagStart)
+  const openTag = code.slice(tagStart, tagEnd)
 
   if (tagName === 'a') {
-    // Find <a ...className="..."...> and add/replace href
-    const re = new RegExp(`(<a(?:[^>]*) className=["']${escapedClass}["'](?:[^>]*))(?:\\s+href=["'][^"']*["'])?(>)`, 'g')
-    const result = code.replace(re, (_, before, close) => {
-      return `${before} href="${href}"${close}`
-    })
-    if (result !== code) return result
-
-    // Fallback: simpler pattern — find the opening <a tag and insert href
-    const simpleRe = new RegExp(`(<a)(\\s+className=["']${escapedClass}["'])`, 'g')
-    return code.replace(simpleRe, `$1 href="${href}"$2`)
+    // Replace or insert href on the <a> tag
+    let newOpenTag: string
+    if (/\bhref=["'][^"']*["']/.test(openTag)) {
+      newOpenTag = openTag.replace(/\bhref=["'][^"']*["']/, `href="${href}"`)
+    } else {
+      // Insert href right after "<a"
+      newOpenTag = openTag.replace(/^<a(\s|>)/, `<a href="${href}"$1`)
+    }
+    return code.slice(0, tagStart) + newOpenTag + code.slice(tagEnd)
   }
 
-  if (tagName === 'button') {
-    // Replace or add onClick handler
-    const re = new RegExp(`(<button(?:[^>]*) className=["']${escapedClass}["'][^>]*)(?:\\s+onClick=\\{[^}]+\\})?(>)`, 'g')
-    const result = code.replace(re, (_, before, close) => {
-      return `${before} onClick={() => window.open('${href}','_blank')}${close}`
-    })
-    if (result !== code) return result
-    const simpleRe = new RegExp(`(<button)(\\s+className=["']${escapedClass}["'])`, 'g')
-    return code.replace(simpleRe, `$1 onClick={() => window.open('${href}','_blank')}$2`)
+  // For all other tags (button, span, div, li, etc.) — wrap the whole element in <a>
+  const isSelfClosing = openTag.trimEnd().endsWith('/>')
+  if (isSelfClosing) {
+    // <input />, <img /> etc. — wrap the single tag
+    return (
+      code.slice(0, tagStart) +
+      `<a href="${href}" target="_blank" rel="noopener noreferrer">` +
+      openTag +
+      `</a>` +
+      code.slice(tagEnd)
+    )
   }
 
-  // For other tags (span, div, etc.) — wrap content in <a href="...">...</a>
-  // Find the element's full content and wrap it
-  const openTagRe = new RegExp(`<${tagName}[^>]*className=["']${escapedClass}["'][^>]*>`, 'g')
-  const openTagMatch = openTagRe.exec(code)
-  if (!openTagMatch) return code
+  // Find the matching closing tag
+  const closeEnd = findMatchingClose(code, tagEnd)
+  const inner = code.slice(tagStart, closeEnd)   // full element including closing tag
 
-  // Insert a wrapping <a> around the inner text by inserting after opening tag
-  // and before closing tag. Simple approach: replace opening tag to include a nested <a>
-  return code.replace(openTagMatch[0], `${openTagMatch[0]}<a href="${href}" target="_blank" rel="noopener noreferrer">`) +
-    code.slice(openTagRe.lastIndex).replace(new RegExp(`</${tagName}>`, ''), `</a></${tagName}>`)
+  return (
+    code.slice(0, tagStart) +
+    `<a href="${href}" target="_blank" rel="noopener noreferrer">` +
+    inner +
+    `</a>` +
+    code.slice(closeEnd)
+  )
 }
 
 // ── Link editor sub-component ─────────────────────────────────────────────────
