@@ -12,12 +12,17 @@ export class OpenRouterAdapter implements AIAdapter {
   ) {}
 
   async isAvailable(): Promise<boolean> {
+    // A 401 means the key is wrong — the service is reachable but auth fails.
+    // Return true so the adapter is used and the user gets a clear 401 error message
+    // from the stream(), rather than a generic "provider not reachable" message.
+    if (!this.apiKey || this.apiKey.length < 20) return false
     try {
       const res = await fetch(`${OPENROUTER_BASE}/models`, {
         headers: { Authorization: `Bearer ${this.apiKey}` },
         signal: AbortSignal.timeout(5000),
       })
-      return res.ok
+      // 401 = reachable but wrong key — treat as available so stream() gives better error
+      return res.ok || res.status === 401
     } catch {
       return false
     }
@@ -59,7 +64,13 @@ export class OpenRouterAdapter implements AIAdapter {
     }
 
     if (!res.ok || !res.body) {
-      yield { type: 'error', message: `OpenRouter responded with ${res.status}` }
+      let detail = ''
+      try { detail = await res.text() } catch { /* ignore */ }
+      if (res.status === 401) {
+        yield { type: 'error', message: `OpenRouter API key is invalid or was saved incorrectly. Go to Admin → Providers, delete this provider, and re-add it with the correct API key (should start with sk-or-v1- and be ~73 characters). Details: ${detail}` }
+      } else {
+        yield { type: 'error', message: `OpenRouter responded with ${res.status}: ${detail}` }
+      }
       return
     }
 
