@@ -177,6 +177,60 @@ function ImagePicker({
     }
   }
 
+  // ── Detect whether the element already has an image so we can show Remove ──
+
+  /** True if the opening tag of this element currently has a backgroundImage style */
+  const hasBgImage = (() => {
+    const bounds = findTagBounds(code, tagName, className)
+    if (!bounds) return false
+    const openTag = code.slice(bounds[0], bounds[1])
+    return /backgroundImage/.test(openTag)
+  })()
+
+  /** True if this <img> currently has a real src (not empty / placeholder) */
+  const hasImgSrc = (() => {
+    if (!isImgTag) return false
+    const bounds = findTagBounds(code, tagName, className)
+    if (!bounds) return false
+    const openTag = code.slice(bounds[0], bounds[1])
+    const m = openTag.match(/\bsrc=["']([^"']*)["']/)
+    return !!(m && m[1].trim())
+  })()
+
+  /** Remove background-image from a container by stripping the entire style prop
+   *  (same safe brace-depth approach used in applyBgImage) */
+  function removeBgImage() {
+    const bounds = findTagBounds(code, tagName, className)
+    if (!bounds) return
+    const [ts, te] = bounds
+    let openTag = code.slice(ts, te)
+    const styleIdx = openTag.search(/\bstyle=\{/)
+    if (styleIdx < 0) return
+    let i = styleIdx + 'style='.length
+    let depth = 0
+    while (i < openTag.length) {
+      const ch = openTag[i]
+      if (ch === '{') depth++
+      else if (ch === '}') { depth--; if (depth === 0) { i++; break } }
+      i++
+    }
+    const removeFrom = (styleIdx > 0 && openTag[styleIdx - 1] === ' ') ? styleIdx - 1 : styleIdx
+    openTag = openTag.slice(0, removeFrom) + openTag.slice(i)
+    onSave(code.slice(0, ts) + openTag + code.slice(te))
+  }
+
+  /** Remove an <img> tag by replacing it with a gradient placeholder div */
+  function removeImgTag() {
+    const bounds = findTagBounds(code, tagName, className)
+    if (!bounds) return
+    const [ts, te] = bounds
+    // Replace the whole self-closing <img .../> with a placeholder div
+    const placeholder = `<div className="w-full h-full bg-gradient-to-br from-zinc-700 to-zinc-800 flex items-center justify-center"><span className="text-zinc-500 text-sm">Image</span></div>`
+    onSave(code.slice(0, ts) + placeholder + code.slice(te))
+  }
+
+  const hasImage = isImgTag ? hasImgSrc : hasBgImage
+
   const modeLabel = isImgTag
     ? 'Click a photo to replace this image'
     : bgMode === 'cover'
@@ -188,20 +242,32 @@ function ImagePicker({
   return (
     <div className="rounded-lg border border-purple-500/40 bg-purple-500/5 p-2.5 space-y-2.5">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <div className="flex items-center gap-1.5 flex-1 min-w-0">
           <span className="text-purple-400">🖼</span>
           <span className="text-[10px] font-semibold text-purple-300 uppercase tracking-wide">
             {isImgTag ? 'Replace Image' : 'Add Image'}
           </span>
         </div>
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          disabled={uploading}
-          className="text-[10px] px-2 py-0.5 bg-purple-600 hover:bg-purple-500 text-white rounded transition-colors disabled:opacity-50"
-        >
-          {uploading ? '↻ Uploading…' : '+ Upload'}
-        </button>
+        <div className="flex gap-1 shrink-0">
+          {/* Remove button — only when element has an image */}
+          {hasImage && (
+            <button
+              onClick={() => isImgTag ? removeImgTag() : removeBgImage()}
+              className="text-[10px] px-2 py-0.5 bg-red-900/60 hover:bg-red-700 text-red-300 hover:text-white border border-red-700/50 rounded transition-colors"
+              title={isImgTag ? 'Remove this image (replaces with placeholder)' : 'Remove background image'}
+            >
+              ✕ Remove
+            </button>
+          )}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="text-[10px] px-2 py-0.5 bg-purple-600 hover:bg-purple-500 text-white rounded transition-colors disabled:opacity-50"
+          >
+            {uploading ? '↻ …' : '+ Upload'}
+          </button>
+        </div>
       </div>
 
       <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={e => upload(e.target.files)} />
