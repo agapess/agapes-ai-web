@@ -3,6 +3,19 @@ import { useState, useRef, useEffect } from 'react'
 import { useChatStore, type ChatMessage } from '@/store/chatStore'
 import { useBuilderStore } from '@/store/builderStore'
 
+// ── Context-aware hints based on page type ────────────────────────────────────
+function getPageHints(pageName: string): string[] {
+  const n = pageName.toLowerCase()
+  if (n.includes('contact')) return ['Add a map section', 'Simplify form to name + email only', 'Add office hours info', 'Add FAQ below the form']
+  if (n.includes('about')) return ['Add a team member grid', 'Add a company timeline', 'Add client logos section', 'Make it more personal and story-driven']
+  if (n.includes('pric')) return ['Add feature comparison table', 'Add testimonials below pricing', 'Add FAQ about billing', 'Add a money-back guarantee badge']
+  if (n.includes('portfolio') || n.includes('gallery') || n.includes('work')) return ['Add filterable categories', 'Add a case study view', 'Add client testimonials', 'Make the grid masonry-style']
+  if (n.includes('blog')) return ['Add a newsletter signup section', 'Add category filter tabs', 'Add a featured post at top', 'Add author bio cards']
+  if (n.includes('service')) return ['Add a process / how-it-works section', 'Add client results / stats', 'Add before/after comparison', 'Add CTA with pricing link']
+  if (n.includes('home') || n === '') return ['Add a testimonials section', 'Make the hero section more impactful', 'Add an animated features grid', 'Add a pricing preview section']
+  return ['Add a new section', 'Improve the typography and spacing', 'Add hover animations and transitions', 'Make it fully responsive for mobile']
+}
+
 // ── Build phase labels ────────────────────────────────────────────────────────
 const PHASE_LABEL: Record<string, string> = {
   thinking: '🧠 Planning your website…',
@@ -184,6 +197,18 @@ export default function ChatPanel() {
             } else if (event.type === 'done') {
               success = true
               finalizeStreamingMessage(lastGeneratedCode)
+              // Save to version history
+              if (lastGeneratedCode && project && activePage) {
+                fetch(`/api/history/${project.id}`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    pageId: activePage.id,
+                    content: lastGeneratedCode,
+                    description: `AI: ${content.slice(0, 60)}${content.length > 60 ? '…' : ''}`,
+                  }),
+                }).catch(() => {})
+              }
             } else if (event.type === 'error') {
               addMessage({ role: 'assistant', content: `⚠️ ${event.message}`, timestamp: Date.now() })
               finalizeStreamingMessage()
@@ -244,14 +269,12 @@ export default function ChatPanel() {
         {messages.length === 0 && !streaming && (
           <div className="mt-8 space-y-3 text-center">
             <p className="text-muted-foreground text-sm">
-              Describe the website you want to build, and I'll plan it out and generate it for you.
+              {activePage
+                ? `Working on "${activePage.name}" — what would you like to add or change?`
+                : 'Describe the website you want to build, and I\'ll plan it out and generate it for you.'}
             </p>
             <div className="flex flex-col gap-2">
-              {[
-                'Landing page for a SaaS startup',
-                'Personal portfolio with dark theme',
-                'E-commerce product showcase',
-              ].map(hint => (
+              {getPageHints(activePage?.name ?? '').map(hint => (
                 <button
                   key={hint}
                   onClick={() => setInput(hint)}

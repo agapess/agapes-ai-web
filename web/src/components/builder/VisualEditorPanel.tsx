@@ -2,6 +2,7 @@
 import { useCallback, useState, useRef, useEffect } from 'react'
 import { useBuilderStore } from '@/store/builderStore'
 import { swapTailwindClass, replaceText } from '@/lib/tailwindMutator'
+import SectionsSidebar from './SectionsSidebar'
 
 // ── Image picker sub-component ────────────────────────────────────────────────
 function ImagePicker({
@@ -427,6 +428,9 @@ export default function VisualEditorPanel() {
     activePage, project, updatePageContent,
   } = useBuilderStore()
 
+  // Declare code before any early return so SectionsSidebar can use it
+  const code = previewCode
+
   const saveCode = useCallback((updated: string) => {
     setPreviewCode(updated)
     if (activePage && project) {
@@ -441,16 +445,16 @@ export default function VisualEditorPanel() {
 
   if (!selectedElement) {
     return (
-      <div className="p-4 space-y-3 text-center">
-        <p className="text-xs text-muted-foreground">
-          Click any element in the preview to edit its properties.
-        </p>
-        <p className="text-[10px] text-muted-foreground/60">
-          Drag the indigo handle at the top of each section to reorder it.
-        </p>
-        <p className="text-[10px] text-muted-foreground/60">
-          Use the <strong>×</strong> button to delete a section, and the <strong>+</strong> to add one.
-        </p>
+      <div className="space-y-1">
+        <SectionsSidebar code={code} onSave={saveCode} />
+        <div className="p-4 space-y-2 text-center">
+          <p className="text-xs text-muted-foreground">
+            Click any element in the preview to edit its properties.
+          </p>
+          <p className="text-[10px] text-muted-foreground/60">
+            Use ↑↓ buttons above to reorder sections, or use the <strong>+</strong> / <strong>×</strong> overlay buttons in the preview.
+          </p>
+        </div>
       </div>
     )
   }
@@ -458,7 +462,6 @@ export default function VisualEditorPanel() {
   // Capture non-null reference for use in nested functions
   const el = selectedElement
   const { tagName, className, textContent } = el
-  const code = previewCode
   const isLiteralClass = typeof className === 'string' && !className.includes('{')
 
   function mutate(prefix: string, newValue: string, mode: 'color' | 'size' | 'any' = 'any') {
@@ -483,7 +486,11 @@ export default function VisualEditorPanel() {
   const isImg = tagName === 'img'
 
   return (
-    <div className="p-3 space-y-4 text-xs overflow-y-auto">
+    <div className="space-y-0 text-xs overflow-y-auto">
+      <div className="p-3">
+        <SectionsSidebar code={code} onSave={saveCode} />
+      </div>
+      <div className="p-3 pt-0 space-y-4">
       {/* Element badge */}
       <div className="flex items-center gap-2 flex-wrap">
         <span className="font-mono bg-secondary px-2 py-0.5 rounded text-primary text-[10px]">
@@ -618,6 +625,7 @@ export default function VisualEditorPanel() {
           </div>
         </>
       )}
+      </div>
     </div>
   )
 }

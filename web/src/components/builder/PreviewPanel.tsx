@@ -209,6 +209,33 @@ requestAnimationFrame(function() {
 });
 `
 
+// Index with shared nav — wraps App in Fragment with Nav above it
+const BUILDER_INDEX_WITH_NAV_JS = `
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import './styles.css';
+import App from './App';
+import Nav from './SharedNav';
+import { assignIds, attachListeners, watchForRenders } from './builder-bridge.js';
+var root = createRoot(document.getElementById('root'));
+root.render(React.createElement(React.Fragment, null, React.createElement(Nav), React.createElement(App)));
+requestAnimationFrame(function() {
+  assignIds();
+  attachListeners();
+  watchForRenders();
+  window.parent.postMessage({ type: 'builder:ready' }, '*');
+});
+`
+
+const PLAIN_INDEX_WITH_NAV_JS = `
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import App from './App';
+import Nav from './SharedNav';
+var root = createRoot(document.getElementById('root'));
+root.render(React.createElement(React.Fragment, null, React.createElement(Nav), React.createElement(App)));
+`
+
 // ── Quick-edit style presets ──────────────────────────────────────────────────
 
 const QUICK_EDITS = [
@@ -416,6 +443,7 @@ export default function PreviewPanel() {
     activePreviewTab, setActivePreviewTab, setPreviewSize,
     setPreviewCode, activePage, project, updatePageContent,
     visualEditMode, setVisualEditMode, selectedElement, setSelectedElement,
+    setSaveStatus, navCode,
   } = useBuilderStore()
 
   const [fullscreen, setFullscreen] = useState(false)
@@ -432,21 +460,44 @@ export default function PreviewPanel() {
   const code = isValidCode(previewCode) ? previewCode : STARTER_CODE
   // Code sent to Sandpack — /uploads/ paths are made absolute so the iframe can load them
   const sandpackCode = useMemo(() => absolutifyImageUrls(code), [code])
+
+  // ── Quality indicators ────────────────────────────────────────────────────
+  const mobileReady = useMemo(() => {
+    if (!isValidCode(previewCode)) return null
+    return /\b(?:sm:|md:|lg:|xl:|2xl:)\w/.test(previewCode)
+  }, [previewCode])
+
+  const a11yIssues = useMemo(() => {
+    if (!isValidCode(previewCode)) return []
+    const issues: string[] = []
+    const imgNoAlt = (previewCode.match(/<img(?![^>]*\balt=)[^>]*/g) ?? []).length
+    if (imgNoAlt > 0) issues.push(`${imgNoAlt} image${imgNoAlt > 1 ? 's' : ''} missing alt=`)
+    return issues
+  }, [previewCode])
   const textEntries = useMemo(() => extractTaggedTexts(code), [code])
   const linkEntries = useMemo(() => extractLinks(code), [code])
 
   // ── Persist code changes ──────────────────────────────────────────────────
-  const saveCode = useCallback((updated: string) => {
+  const saveCode = useCallback(async (updated: string) => {
     setPreviewCode(updated)
+    setSaveStatus('saving')
     if (activePage && project) {
       updatePageContent(activePage.id, updated)
-      fetch(`/api/pages/${project.id}/${activePage.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: updated }),
-      }).catch(() => {})
+      try {
+        await fetch(`/api/pages/${project.id}/${activePage.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: updated }),
+        })
+        setSaveStatus('saved')
+        setTimeout(() => setSaveStatus('idle'), 2000)
+      } catch {
+        setSaveStatus('error')
+      }
+    } else {
+      setSaveStatus('idle')
     }
-  }, [setPreviewCode, activePage, project, updatePageContent])
+  }, [setPreviewCode, activePage, project, updatePageContent, setSaveStatus])
 
   // ── Send command to Sandpack iframe ───────────────────────────────────────
   const sendToIframe = useCallback((msg: object) => {
@@ -542,14 +593,19 @@ export default function PreviewPanel() {
 
   const sandpackHeight = containerHeight > 0 ? `${containerHeight}px` : '100%'
 
-  // ── Sandpack files (inject bridge when visual mode is on) ─────────────────
+  // ── Sandpack files (inject bridge when visual mode is on, nav when set) ──
   const sandpackFiles = useMemo(() => ({
     '/App.js': sandpackCode,
-    ...(visualEditMode ? {
-      '/builder-bridge.js': BUILDER_BRIDGE_JS,
-      '/index.js': BUILDER_INDEX_JS,
-    } : {}),
-  }), [sandpackCode, visualEditMode])
+    ...(navCode ? { '/SharedNav.js': navCode } : {}),
+    ...(visualEditMode
+      ? {
+          '/builder-bridge.js': BUILDER_BRIDGE_JS,
+          '/index.js': navCode ? BUILDER_INDEX_WITH_NAV_JS : BUILDER_INDEX_JS,
+        }
+      : navCode
+        ? { '/index.js': PLAIN_INDEX_WITH_NAV_JS }
+        : {}),
+  }), [sandpackCode, visualEditMode, navCode])
 
   // ── Edit panel handlers ───────────────────────────────────────────────────
   const applyTextEdit = useCallback((oldText: string, newText: string) => {
@@ -646,6 +702,24 @@ export default function PreviewPanel() {
               </button>
             ))}
           </div>
+        )}
+
+        {/* Quality badges */}
+        {mobileReady !== null && (
+          <span
+            title={mobileReady ? 'Responsive — breakpoint classes detected (sm:, md:, lg:)' : 'No responsive Tailwind breakpoints found — may not look right on mobile. Ask AI to make it responsive.'}
+            className={`ml-2 text-[10px] px-1.5 py-0.5 rounded-full font-medium cursor-default select-none ${mobileReady ? 'bg-green-900/40 text-green-400' : 'bg-yellow-900/40 text-yellow-400'}`}
+          >
+            {mobileReady ? '📱 Responsive' : '⚠ Desktop only'}
+          </span>
+        )}
+        {a11yIssues.length > 0 && (
+          <span
+            title={a11yIssues.join('\n')}
+            className="text-[10px] px-1.5 py-0.5 rounded-full bg-orange-900/40 text-orange-400 cursor-default select-none font-medium"
+          >
+            ♿ {a11yIssues.length} {a11yIssues.length === 1 ? 'issue' : 'issues'}
+          </span>
         )}
 
         <div className="ml-auto flex items-center gap-1">

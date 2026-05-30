@@ -1,10 +1,18 @@
 'use client'
+import { useState } from 'react'
 import BuilderHeader from './BuilderHeader'
 import ChatPanel from './ChatPanel'
 import PreviewPanel from './PreviewPanel'
 import StylePanel from './StylePanel'
+import OnboardingWizard from './OnboardingWizard'
 
-export default function BuilderLayout() {
+interface Props {
+  showWizard?: boolean
+}
+
+export default function BuilderLayout({ showWizard: initialShowWizard = false }: Props) {
+  const [showWizard, setShowWizard] = useState(initialShowWizard)
+
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden">
       <BuilderHeader />
@@ -13,6 +21,7 @@ export default function BuilderLayout() {
         <PreviewPanel />
         <StylePanel />
       </div>
+      {showWizard && <OnboardingWizard onComplete={() => setShowWizard(false)} />}
     </div>
   )
 }

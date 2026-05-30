@@ -133,6 +133,14 @@ export const subscriptions = sqliteTable('subscriptions', {
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 })
 
+export const formSubmissions = sqliteTable('form_submissions', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  pageId: text('page_id'),
+  data: text('data', { mode: 'json' }).notNull().default('{}'),
+  submittedAt: integer('submitted_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+})
+
 export const templates = sqliteTable('templates', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),

@@ -8,6 +8,8 @@ export interface BuilderPage {
   order: number
   content: string
   isHomePage: boolean
+  seoTitle?: string
+  seoDescription?: string
 }
 
 export interface SelectedElement {
@@ -27,6 +29,8 @@ interface Project {
   settings?: Record<string, unknown>
 }
 
+type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
+
 interface BuilderState {
   project: Project | null
   pages: BuilderPage[]
@@ -43,6 +47,10 @@ interface BuilderState {
   visualEditMode: boolean
   /** Currently selected element in visual editor */
   selectedElement: SelectedElement | null
+  /** Autosave status indicator */
+  saveStatus: SaveStatus
+  /** Shared nav component JSX (empty string = none) */
+  navCode: string
 
   setProject: (project: Project) => void
   setPages: (pages: BuilderPage[]) => void
@@ -57,6 +65,8 @@ interface BuilderState {
   setActivePreviewTab: (tab: 'preview' | 'code') => void
   setVisualEditMode: (on: boolean) => void
   setSelectedElement: (el: SelectedElement | null) => void
+  setSaveStatus: (status: SaveStatus) => void
+  setNavCode: (code: string) => void
 }
 
 export const useBuilderStore = create<BuilderState>((set, get) => ({
@@ -72,6 +82,8 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   activePreviewTab: 'preview',
   visualEditMode: false,
   selectedElement: null,
+  saveStatus: 'idle',
+  navCode: '',
 
   setProject: (project) => set({ project }),
   setPages: (pages) => {
@@ -102,4 +114,6 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   setActivePreviewTab: (activePreviewTab) => set({ activePreviewTab }),
   setVisualEditMode: (visualEditMode) => set({ visualEditMode, selectedElement: null }),
   setSelectedElement: (selectedElement) => set({ selectedElement }),
+  setSaveStatus: (saveStatus) => set({ saveStatus }),
+  setNavCode: (navCode) => set({ navCode }),
 }))

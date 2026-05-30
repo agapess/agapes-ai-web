@@ -111,8 +111,32 @@ export default defineConfig({
   zip.file('tailwind.config.js', `export default { content: ['./index.html', './src/**/*.{js,jsx}'], theme: { extend: {} }, plugins: [] }`)
   zip.file('postcss.config.js', `export default { plugins: { tailwindcss: {}, autoprefixer: {} } }`)
 
+  // Get nav code from brand settings
+  const projectSettings = project.settings as Record<string, unknown> | null
+  const brandSettings = projectSettings?.brand as { navCode?: string } | undefined
+  const navCode = brandSettings?.navCode ? normaliseCode(brandSettings.navCode) : null
+
   const src = zip.folder('src')!
-  src.file('main.jsx', `import React from 'react'\nimport ReactDOM from 'react-dom/client'\nimport App from './App.jsx'\nimport './index.css'\nReactDOM.createRoot(document.getElementById('root')).render(<React.StrictMode><App /></React.StrictMode>)`)
+
+  if (navCode) {
+    src.file('SharedNav.jsx', navCode.replace(/export default function App\(\)/, 'export default function SharedNav()'))
+    src.file('main.jsx', `import React from 'react'
+import ReactDOM from 'react-dom/client'
+import App from './App.jsx'
+import SharedNav from './SharedNav.jsx'
+import './index.css'
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <React.Fragment>
+      <SharedNav />
+      <App />
+    </React.Fragment>
+  </React.StrictMode>
+)`)
+  } else {
+    src.file('main.jsx', `import React from 'react'\nimport ReactDOM from 'react-dom/client'\nimport App from './App.jsx'\nimport './index.css'\nReactDOM.createRoot(document.getElementById('root')).render(<React.StrictMode><App /></React.StrictMode>)`)
+  }
+
   src.file('index.css', `@tailwind base;\n@tailwind components;\n@tailwind utilities;`)
   src.file('App.jsx', mainCode)
 

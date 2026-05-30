@@ -1,8 +1,17 @@
+interface BrandSettings {
+  primaryColor?: string
+  fontFamily?: string
+  borderRadius?: 'sharp' | 'rounded' | 'pill'
+  navCode?: string
+}
+
 interface BuildMessagesOptions {
   userMessage: string
   history: Array<{ role: 'user' | 'assistant'; content: string }>
   projectContext: string | undefined
   customInstructions: string | undefined
+  brandSettings?: BrandSettings
+  projectId?: string
 }
 
 type Message = { role: 'system' | 'user' | 'assistant'; content: string }
@@ -99,8 +108,46 @@ export default function App() {
 - Build a testimonials section with avatar cards
 `
 
-export function buildMessages({ userMessage, history, projectContext, customInstructions }: BuildMessagesOptions): Message[] {
+export function buildMessages({ userMessage, history, projectContext, customInstructions, brandSettings, projectId }: BuildMessagesOptions): Message[] {
   let systemContent = SYSTEM_PROMPT
+
+  // ── Brand settings ────────────────────────────────────────────────────────
+  if (brandSettings && (brandSettings.primaryColor || brandSettings.fontFamily)) {
+    const color = brandSettings.primaryColor ?? 'indigo'
+    const font = brandSettings.fontFamily ?? 'Inter'
+    const radiusDesc = brandSettings.borderRadius === 'pill'
+      ? 'rounded-full on all buttons and pills'
+      : brandSettings.borderRadius === 'sharp'
+        ? 'no border radius (sharp corners) on buttons and cards'
+        : 'rounded-lg on cards, rounded-md on buttons'
+    const hasNav = !!brandSettings.navCode
+
+    systemContent += `
+
+─── BRAND SETTINGS (follow these for every generation) ──────────────────────
+- Primary color: ${color} — use ${color}-500, ${color}-600, ${color}-400 Tailwind classes for accents, buttons, and highlights
+- Font family: ${font} — add style={{fontFamily:'${font}'}} to the root element if needed
+- Border radius: ${radiusDesc}
+- Navigation: ${hasNav ? 'A global nav bar is provided separately — do NOT add another nav bar to your component' : 'Include a sticky navigation bar at the top of your component'}
+`
+  }
+
+  // ── Form submission handler ───────────────────────────────────────────────
+  if (projectId) {
+    systemContent += `
+─── CONTACT FORM INTEGRATION ────────────────────────────────────────────────
+When creating contact forms, use this EXACT submit handler so submissions are saved:
+  const [submitted, setSubmitted] = React.useState(false)
+  async function handleSubmit(e) {
+    e.preventDefault()
+    const data = {}
+    new FormData(e.target).forEach(function(v,k){ data[k]=v })
+    try { await fetch('/api/contact/${projectId}', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) }) } catch {}
+    setSubmitted(true)
+  }
+Show a success message when submitted === true (replace the form with a thank-you message).
+`
+  }
 
   if (customInstructions) {
     systemContent += `\n\n─── CUSTOM INSTRUCTIONS FROM PROJECT OWNER ─────────────────────────────────\n${customInstructions}`

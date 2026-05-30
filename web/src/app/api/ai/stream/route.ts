@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { pages, chatSessions } from '@/lib/schema'
+import { pages, chatSessions, projects } from '@/lib/schema'
 import { and, eq } from 'drizzle-orm'
 import { resolveProvider } from '@/lib/providerResolver'
 import { hasCredits } from '@/lib/credits'
@@ -33,6 +33,7 @@ export async function POST(req: NextRequest) {
     projectId: string
     message: string
     provider?: string
+    customInstructions?: string
   }
 
   const { projectId, message, provider: preferredProvider, customInstructions } = body
@@ -68,6 +69,15 @@ export async function POST(req: NextRequest) {
     .get()
   const projectContext = homePage?.content ? JSON.stringify(homePage.content) : undefined
 
+  // Load brand settings from project
+  const project = db.select({ settings: projects.settings }).from(projects)
+    .where(eq(projects.id, projectId))
+    .get()
+  const projectSettings = project?.settings as Record<string, unknown> | null
+  const brandSettings = projectSettings?.brand as {
+    primaryColor?: string; fontFamily?: string; borderRadius?: string; navCode?: string
+  } | undefined
+
   const aiRequest = {
     projectId,
     message,
@@ -80,6 +90,7 @@ export async function POST(req: NextRequest) {
     },
     projectContext,
     customInstructions,
+    brandSettings,
   }
 
   let aiRes: Response

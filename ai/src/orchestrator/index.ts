@@ -10,6 +10,7 @@ export interface OrchestratorRequest {
   providerConfig?: ProviderConfig
   projectContext?: string
   customInstructions?: string
+  brandSettings?: { primaryColor?: string; fontFamily?: string; borderRadius?: string; navCode?: string }
 }
 
 function sendEvent(res: Response, data: object) {
@@ -37,11 +38,18 @@ export async function orchestrate(req: OrchestratorRequest, res: Response, maxRe
       ? req.message
       : `${req.message}\n\n[Previous attempt failed: ${lastError}. Please provide a valid React component in a \`\`\`jsx code block.]`
 
+    // Emit retry signal to the user
+    if (attempt > 1) {
+      sendEvent(res, { type: 'text_delta', content: '\n\n⚡ Refining the output…\n' })
+    }
+
     const messages = buildMessages({
       userMessage,
       history: req.history,
       projectContext: req.projectContext,
       customInstructions: req.customInstructions,
+      brandSettings: req.brandSettings,
+      projectId: req.projectId,
     })
 
     let accumulated = ''

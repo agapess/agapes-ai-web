@@ -75,6 +75,14 @@ export default function BuilderPage({ project, initialPages, initialCredits }: P
 
     setActivePreviewTab('preview')
 
+    // ── Load brand/nav settings ──────────────────────────────────────────
+    const brandSettings = settings.brand as { navCode?: string } | undefined
+    if (brandSettings?.navCode) {
+      useBuilderStore.getState().setNavCode(brandSettings.navCode)
+    } else {
+      useBuilderStore.getState().setNavCode('')
+    }
+
     // ── 2. Reset chat store and reload history for this project ──────────
     clearMessages()
 
@@ -113,5 +121,10 @@ export default function BuilderPage({ project, initialPages, initialCredits }: P
     addMessage,
   ])
 
-  return <BuilderLayout />
+  // Show onboarding wizard if project hasn't been set up and has no content
+  const settings = project.settings ?? {}
+  const hasContent = initialPages.some(p => typeof p.content === 'string' && p.content.trim().length > 50)
+  const showWizard = !settings.onboardingComplete && !hasContent
+
+  return <BuilderLayout showWizard={showWizard} />
 }

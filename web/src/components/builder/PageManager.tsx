@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useBuilderStore } from '@/store/builderStore'
+import SeoPanel from './SeoPanel'
 
 // ── Page template starters ─────────────────────────────────────────────────────
 // Each template gives the page a pre-built JSX body the AI can then extend.
@@ -293,6 +294,7 @@ export default function PageManager() {
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
   const [showTemplates, setShowTemplates] = useState(false)
+  const [seoPageId, setSeoPageId] = useState<string | null>(null)
 
   async function createPage(name?: string, content?: string) {
     const pageName = name ?? newName.trim()
@@ -338,23 +340,42 @@ export default function PageManager() {
     <div className="flex flex-col gap-1">
       {/* Page list */}
       {pages.map(page => (
-        <div
-          key={page.id}
-          className={`flex items-center justify-between px-2 py-1.5 rounded cursor-pointer group ${
-            activePage?.id === page.id ? 'bg-primary/20 text-primary' : 'hover:bg-secondary text-foreground'
-          }`}
-          onClick={() => setActivePage(page)}
-        >
-          <span className="text-xs truncate flex-1">{page.name}</span>
-          {!page.isHomePage ? (
+        <div key={page.id}>
+          <div
+            className={`flex items-center justify-between px-2 py-1.5 rounded cursor-pointer group ${
+              activePage?.id === page.id ? 'bg-primary/20 text-primary' : 'hover:bg-secondary text-foreground'
+            }`}
+            onClick={() => setActivePage(page)}
+          >
+            <span className="text-xs truncate flex-1">{page.name}</span>
+            {/* SEO button */}
             <button
-              onClick={e => { e.stopPropagation(); deletePage(page.id) }}
-              className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-red-400 text-xs transition-opacity ml-1"
+              onClick={e => { e.stopPropagation(); setSeoPageId(seoPageId === page.id ? null : page.id) }}
+              className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground text-[10px] transition-opacity ml-1 px-1"
+              title="SEO settings"
             >
-              ✕
+              SEO
             </button>
-          ) : (
-            <span className="text-xs text-muted-foreground ml-1">home</span>
+            {!page.isHomePage ? (
+              <button
+                onClick={e => { e.stopPropagation(); deletePage(page.id) }}
+                className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-red-400 text-xs transition-opacity"
+              >
+                ✕
+              </button>
+            ) : (
+              <span className="text-xs text-muted-foreground">home</span>
+            )}
+          </div>
+          {/* Inline SEO panel */}
+          {seoPageId === page.id && project && (
+            <SeoPanel
+              pageId={page.id}
+              projectId={project.id}
+              initialTitle={page.seoTitle ?? ''}
+              initialDesc={page.seoDescription ?? ''}
+              onClose={() => setSeoPageId(null)}
+            />
           )}
         </div>
       ))}

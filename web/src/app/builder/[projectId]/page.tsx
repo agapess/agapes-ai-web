@@ -43,7 +43,11 @@ export default async function BuilderRoute({ params }: Props) {
     <BuilderPage
       key={params.projectId}
       project={{ ...project, settings: project.settings as Record<string, unknown> }}
-      initialPages={projectPages}
+      initialPages={projectPages.map(p => ({
+          ...p,
+          seoTitle: p.seoTitle ?? undefined,
+          seoDescription: p.seoDescription ?? undefined,
+        }))}
       initialCredits={user?.credits ?? 0}
     />
   )

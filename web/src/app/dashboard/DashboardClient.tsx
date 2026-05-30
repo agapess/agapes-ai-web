@@ -49,7 +49,7 @@ export default function DashboardClient({ initialProjects, user }: Props) {
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-border px-6 py-4 flex items-center justify-between">
-        <h1 className="text-xl font-bold text-foreground">AI Website Builder</h1>
+        <h1 className="text-xl font-bold text-foreground">✦ Agapes AI Website</h1>
         <div className="flex items-center gap-4">
           <button
             onClick={() => setShowTemplates(true)}
@@ -101,9 +101,31 @@ export default function DashboardClient({ initialProjects, user }: Props) {
         </div>
 
         {projects.length === 0 ? (
-          <div className="text-center py-16 text-muted-foreground">
-            <p className="text-lg">No projects yet.</p>
-            <p className="text-sm mt-1">Create your first project to get started.</p>
+          <div className="flex flex-col items-center py-20 text-center gap-6">
+            <div className="text-7xl select-none">✦</div>
+            <div>
+              <h2 className="text-2xl font-bold mb-2 text-foreground">Build your first website</h2>
+              <p className="text-muted-foreground max-w-sm text-sm">
+                Describe what you want and AI generates a complete, professional website in seconds — no coding needed.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 w-full max-w-xs">
+              {[
+                { label: 'Landing page for my SaaS startup', name: 'SaaS Landing' },
+                { label: 'Portfolio to showcase my design work', name: 'Portfolio' },
+                { label: 'Restaurant with online menu', name: 'Restaurant' },
+                { label: 'Blog for my travel adventures', name: 'Travel Blog' },
+              ].map(({ label, name }) => (
+                <button
+                  key={label}
+                  onClick={() => { setNewName(name) }}
+                  className="px-4 py-3 text-sm text-left rounded-xl border border-border hover:border-primary/40 hover:bg-secondary/50 text-muted-foreground hover:text-foreground transition-all"
+                >
+                  "{label}"
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">or type your own project name above ↑</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
