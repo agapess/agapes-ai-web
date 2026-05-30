@@ -1,7 +1,136 @@
 'use client'
-import { useCallback } from 'react'
+import { useCallback, useState, useRef, useEffect } from 'react'
 import { useBuilderStore } from '@/store/builderStore'
 import { swapTailwindClass, replaceText } from '@/lib/tailwindMutator'
+
+// Tags that can meaningfully have a hyperlink set on them
+const LINKABLE_TAGS = ['a', 'button', 'span', 'div', 'li']
+
+/**
+ * Extract the current href from a JSX element identified by tagName + className.
+ * Returns '' if none found.
+ */
+function extractHref(code: string, tagName: string, className: string): string {
+  const escapedClass = className.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  // Look for href="..." near the element
+  const tagRe = new RegExp(`<${tagName}[^>]*className=["']${escapedClass}["'][^>]*>`)
+  const tagMatch = tagRe.exec(code)
+  if (!tagMatch) return ''
+  const tagStr = tagMatch[0]
+  const hrefMatch = tagStr.match(/href=["']([^"']*)["']/)
+  return hrefMatch ? hrefMatch[1] : ''
+}
+
+/**
+ * Set or replace the href on an <a> element identified by tagName + className.
+ * If the element is not an <a>, wraps its content in <a href="...">.
+ * For button elements, sets onClick={() => window.open('url','_blank')}.
+ */
+function applyHrefToCode(
+  code: string,
+  tagName: string,
+  className: string,
+  href: string,
+): string {
+  const escapedClass = className.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+  if (tagName === 'a') {
+    // Find <a ...className="..."...> and add/replace href
+    const re = new RegExp(`(<a(?:[^>]*) className=["']${escapedClass}["'](?:[^>]*))(?:\\s+href=["'][^"']*["'])?(>)`, 'g')
+    const result = code.replace(re, (_, before, close) => {
+      return `${before} href="${href}"${close}`
+    })
+    if (result !== code) return result
+
+    // Fallback: simpler pattern — find the opening <a tag and insert href
+    const simpleRe = new RegExp(`(<a)(\\s+className=["']${escapedClass}["'])`, 'g')
+    return code.replace(simpleRe, `$1 href="${href}"$2`)
+  }
+
+  if (tagName === 'button') {
+    // Replace or add onClick handler
+    const re = new RegExp(`(<button(?:[^>]*) className=["']${escapedClass}["'][^>]*)(?:\\s+onClick=\\{[^}]+\\})?(>)`, 'g')
+    const result = code.replace(re, (_, before, close) => {
+      return `${before} onClick={() => window.open('${href}','_blank')}${close}`
+    })
+    if (result !== code) return result
+    const simpleRe = new RegExp(`(<button)(\\s+className=["']${escapedClass}["'])`, 'g')
+    return code.replace(simpleRe, `$1 onClick={() => window.open('${href}','_blank')}$2`)
+  }
+
+  // For other tags (span, div, etc.) — wrap content in <a href="...">...</a>
+  // Find the element's full content and wrap it
+  const openTagRe = new RegExp(`<${tagName}[^>]*className=["']${escapedClass}["'][^>]*>`, 'g')
+  const openTagMatch = openTagRe.exec(code)
+  if (!openTagMatch) return code
+
+  // Insert a wrapping <a> around the inner text by inserting after opening tag
+  // and before closing tag. Simple approach: replace opening tag to include a nested <a>
+  return code.replace(openTagMatch[0], `${openTagMatch[0]}<a href="${href}" target="_blank" rel="noopener noreferrer">`) +
+    code.slice(openTagRe.lastIndex).replace(new RegExp(`</${tagName}>`, ''), `</a></${tagName}>`)
+}
+
+// ── Link editor sub-component ─────────────────────────────────────────────────
+function LinkEditor({
+  tagName,
+  className,
+  code,
+  onSave,
+}: {
+  tagName: string
+  className: string
+  code: string
+  onSave: (updated: string) => void
+}) {
+  const current = extractHref(code, tagName, className)
+  const [value, setValue] = useState(current)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  // Re-sync if selection changes
+  useEffect(() => {
+    const fresh = extractHref(code, tagName, className)
+    setValue(fresh)
+  }, [tagName, className, code])
+
+  function apply(url: string) {
+    const trimmed = url.trim()
+    if (!trimmed) return
+    const updated = applyHrefToCode(code, tagName, className, trimmed)
+    onSave(updated)
+  }
+
+  return (
+    <div className="rounded-lg border border-indigo-500/40 bg-indigo-500/5 p-2.5 space-y-2">
+      <div className="flex items-center gap-1.5">
+        <span className="text-indigo-400">🔗</span>
+        <span className="text-[10px] font-semibold text-indigo-300 uppercase tracking-wide">Hyperlink / URL</span>
+      </div>
+      <input
+        ref={inputRef}
+        value={value}
+        onChange={e => setValue(e.target.value)}
+        onBlur={e => apply(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter') { apply(value); e.currentTarget.blur() }
+          if (e.key === 'Escape') { setValue(current); e.currentTarget.blur() }
+        }}
+        placeholder="https://example.com  or  #section-id"
+        className="w-full px-2 py-1.5 text-xs bg-secondary border border-border rounded text-foreground placeholder-muted-foreground/50 focus:outline-none focus:border-indigo-400 font-mono"
+      />
+      <div className="flex gap-1.5 flex-wrap">
+        {['#contact', '#features', '#pricing', 'https://'].map(hint => (
+          <button key={hint} onClick={() => setValue(hint)}
+            className="text-[10px] px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:text-foreground hover:border-indigo-400/50 transition-colors">
+            {hint}
+          </button>
+        ))}
+      </div>
+      <p className="text-[10px] text-muted-foreground/60">
+        {tagName === 'a' ? 'Sets the href attribute.' : tagName === 'button' ? 'Opens URL in new tab on click.' : 'Wraps content in a link.'}
+      </p>
+    </div>
+  )
+}
 
 // ── Tailwind palette with hex values (for color swatches) ────────────────────
 // Keys match Tailwind color names; values are hex per shade.
@@ -145,6 +274,7 @@ export default function VisualEditorPanel() {
   }
 
   const isTextEl = TEXT_TAGS.includes(tagName)
+  const isLinkable = LINKABLE_TAGS.includes(tagName)
 
   return (
     <div className="p-3 space-y-4 text-xs overflow-y-auto">
@@ -163,6 +293,16 @@ export default function VisualEditorPanel() {
           ✕ Deselect
         </button>
       </div>
+
+      {/* Link / URL editor — shown for a, button, span, div, li */}
+      {isLinkable && (
+        <LinkEditor
+          tagName={tagName}
+          className={className}
+          code={code}
+          onSave={saveCode}
+        />
+      )}
 
       {/* Text */}
       {isTextEl && textContent && (

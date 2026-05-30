@@ -78,6 +78,7 @@ function BuildingIndicator({ phase }: { phase: string }) {
 export default function ChatPanel() {
   const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const abortRef = useRef<AbortController | null>(null)
   const {
     messages,
     streaming,
@@ -90,6 +91,13 @@ export default function ChatPanel() {
     setBuildPhase,
   } = useChatStore()
   const { project, setPreviewCode, credits, setCredits, activePage, updatePageContent, customInstructions, setActivePreviewTab } = useBuilderStore()
+
+  function stopStream() {
+    abortRef.current?.abort()
+    abortRef.current = null
+    finalizeStreamingMessage()
+    setBuildPhase('idle')
+  }
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -120,11 +128,15 @@ export default function ChatPanel() {
     setStreaming(true)
     setBuildPhase('thinking')
 
+    const abort = new AbortController()
+    abortRef.current = abort
+
     try {
       const res = await fetch('/api/ai/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectId: project.id, message: content, customInstructions: customInstructions || undefined }),
+        signal: abort.signal,
       })
 
       if (!res.ok) {
@@ -196,8 +208,15 @@ export default function ChatPanel() {
         body: JSON.stringify({ messages: updatedMessages }),
       }).catch(() => {})
 
-    } catch {
-      finalizeStreamingMessage()
+    } catch (err: unknown) {
+      // AbortError means the user clicked Stop — finalize silently without an error message
+      if (err instanceof Error && err.name === 'AbortError') {
+        finalizeStreamingMessage()
+      } else {
+        finalizeStreamingMessage()
+      }
+    } finally {
+      abortRef.current = null
     }
   }
 
@@ -283,13 +302,23 @@ export default function ChatPanel() {
             disabled={streaming}
             className="flex-1 px-3 py-2 bg-secondary border border-border rounded-md text-foreground placeholder-muted-foreground text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
           />
-          <button
-            onClick={sendMessage}
-            disabled={streaming || !input.trim()}
-            className="px-3 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity self-end"
-          >
-            ↑
-          </button>
+          {streaming ? (
+            <button
+              onClick={stopStream}
+              title="Stop generation"
+              className="px-3 py-2 bg-red-600 hover:bg-red-500 text-white rounded-md text-sm font-medium transition-colors self-end flex items-center gap-1"
+            >
+              <span className="w-2.5 h-2.5 bg-white rounded-sm inline-block" />
+            </button>
+          ) : (
+            <button
+              onClick={sendMessage}
+              disabled={!input.trim()}
+              className="px-3 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity self-end"
+            >
+              ↑
+            </button>
+          )}
         </div>
       </div>
     </aside>
