@@ -5,6 +5,40 @@ import { swapTailwindClass, replaceText } from '@/lib/tailwindMutator'
 import SectionsSidebar from './SectionsSidebar'
 
 // ── Image picker sub-component ────────────────────────────────────────────────
+// Works for both <img> tags (replaces src=) and container elements
+// (div/section/header etc.) where it sets a CSS background-image.
+
+// Container tags where background-image makes sense
+const BG_IMAGE_TAGS = ['div', 'section', 'header', 'footer', 'article', 'main', 'aside', 'li', 'span']
+
+/**
+ * Find the opening tag of an element by its className in the JSX source.
+ * Returns [tagStart, tagEnd] (tagEnd = index just past '>').
+ */
+function findTagBounds(code: string, tagName: string, className: string): [number, number] | null {
+  for (const needle of [`className="${className}"`, `className='${className}'`]) {
+    let pos = code.indexOf(needle)
+    while (pos >= 0) {
+      let ts = pos
+      while (ts > 0 && code[ts] !== '<') ts--
+      const after = code.slice(ts + 1)
+      if (after.startsWith(tagName) && /[\s>/]/.test(after[tagName.length])) {
+        // Find end of opening tag (brace-depth aware)
+        let i = ts + 1, depth = 0
+        while (i < code.length) {
+          if (code[i] === '{') depth++
+          else if (code[i] === '}') depth--
+          else if (code[i] === '>' && depth === 0) { i++; break }
+          i++
+        }
+        return [ts, i]
+      }
+      pos = code.indexOf(needle, pos + 1)
+    }
+  }
+  return null
+}
+
 function ImagePicker({
   code,
   tagName,
@@ -21,7 +55,12 @@ function ImagePicker({
   const [images, setImages] = useState<Array<{ url: string; filename: string }>>([])
   const [uploading, setUploading] = useState(false)
   const [loading, setLoading] = useState(true)
+  // For container elements: which apply mode is selected
+  const [bgMode, setBgMode] = useState<'cover' | 'contain' | 'insert'>('cover')
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const isImgTag = tagName === 'img'
+  const isBgCapable = BG_IMAGE_TAGS.includes(tagName)
 
   useEffect(() => {
     setLoading(true)
@@ -49,53 +88,104 @@ function ImagePicker({
     setUploading(false)
   }
 
-  /** Replace the src attribute on the selected <img> tag */
-  function applySrc(newSrc: string) {
-    // Find the <img> by className
-    const needle1 = `className="${className}"`
-    const needle2 = `className='${className}'`
-    let tagStart = -1
-    for (const needle of [needle1, needle2]) {
-      let pos = code.indexOf(needle)
-      while (pos >= 0) {
-        let ts = pos
-        while (ts > 0 && code[ts] !== '<') ts--
-        const after = code.slice(ts + 1)
-        if (after.startsWith(tagName) && /[\s>/]/.test(after[tagName.length])) {
-          tagStart = ts; break
-        }
-        pos = code.indexOf(needle, pos + 1)
-      }
-      if (tagStart >= 0) break
-    }
-    if (tagStart < 0) return
-
-    // Find end of this self-closing tag
-    let i = tagStart + 1
-    let braceDepth = 0
-    while (i < code.length) {
-      const ch = code[i]
-      if (ch === '{') braceDepth++
-      else if (ch === '}') braceDepth--
-      else if (ch === '>' && braceDepth === 0) { i++; break }
-      i++
-    }
-    const openTag = code.slice(tagStart, i)
-    let newOpenTag: string
-    if (/\bsrc=["'][^"']*["']/.test(openTag)) {
-      newOpenTag = openTag.replace(/\bsrc=["'][^"']*["']/, `src="${newSrc}"`)
-    } else {
-      newOpenTag = openTag.replace(/^<img/, `<img src="${newSrc}"`)
-    }
-    onSave(code.slice(0, tagStart) + newOpenTag + code.slice(i))
+  /** Make /uploads/... path absolute so Sandpack iframe can load it */
+  function absoluteUrl(url: string) {
+    if (typeof window === 'undefined') return url
+    return url.startsWith('http') ? url : `${window.location.origin}${url}`
   }
 
+  /** Mode A — <img> tag: replace/add src attribute */
+  function applyImgSrc(imgUrl: string) {
+    const bounds = findTagBounds(code, tagName, className)
+    if (!bounds) return
+    const [ts, te] = bounds
+    const openTag = code.slice(ts, te)
+    const absUrl = absoluteUrl(imgUrl)
+    let newTag: string
+    if (/\bsrc=["'][^"']*["']/.test(openTag)) {
+      newTag = openTag.replace(/\bsrc=["'][^"']*["']/, `src="${absUrl}"`)
+    } else {
+      newTag = openTag.replace(/^<img/, `<img src="${absUrl}"`)
+    }
+    // Ensure alt is present
+    if (!/\balt=/.test(newTag)) {
+      newTag = newTag.replace(/^<img/, `<img alt="image"`)
+    }
+    onSave(code.slice(0, ts) + newTag + code.slice(te))
+  }
+
+  /** Mode B — container: set background-image via inline style */
+  function applyBgImage(imgUrl: string) {
+    const bounds = findTagBounds(code, tagName, className)
+    if (!bounds) return
+    const [ts, te] = bounds
+    const openTag = code.slice(ts, te)
+    const absUrl = absoluteUrl(imgUrl)
+
+    const bgStyleValue = bgMode === 'cover'
+      ? `url('${absUrl}') center/cover no-repeat`
+      : `url('${absUrl}') center/contain no-repeat`
+
+    // If style prop already exists, inject into it
+    if (/\bstyle=\{/.test(openTag)) {
+      // Insert backgroundImage into existing style object
+      const newTag = openTag.replace(
+        /\bstyle=\{\{([\s\S]*?)\}\}/,
+        (_m, inner) => {
+          // Remove any existing backgroundImage entry
+          const cleaned = inner.replace(/,?\s*background(?:Image|image)?:[^,}]+/g, '').trim()
+          const sep = cleaned ? ', ' : ''
+          return `style={{${cleaned}${sep}backgroundImage:"url('${absUrl}')", backgroundSize:'${bgMode}', backgroundPosition:'center', backgroundRepeat:'no-repeat'}}`
+        },
+      )
+      onSave(code.slice(0, ts) + newTag + code.slice(te))
+    } else {
+      // Add new style prop before the closing > of the opening tag
+      const insertBefore = te - 1  // position of '>'
+      const isSelfClose = code[insertBefore - 1] === '/'
+      const insertAt = isSelfClose ? insertBefore - 1 : insertBefore
+      const styleAttr = ` style={{backgroundImage:"url('${absUrl}')", backgroundSize:'${bgMode}', backgroundPosition:'center', backgroundRepeat:'no-repeat'}}`
+      onSave(code.slice(0, ts) + openTag.slice(0, insertAt - ts) + styleAttr + openTag.slice(insertAt - ts) + code.slice(te))
+    }
+  }
+
+  /** Mode C — insert <img> as first child of container */
+  function insertImgChild(imgUrl: string) {
+    const bounds = findTagBounds(code, tagName, className)
+    if (!bounds) return
+    const [, te] = bounds
+    const absUrl = absoluteUrl(imgUrl)
+    const imgTag = `<img src="${absUrl}" alt="image" className="w-full h-full object-cover" />`
+    onSave(code.slice(0, te) + '\n' + imgTag + code.slice(te))
+  }
+
+  function applyImage(imgUrl: string) {
+    if (isImgTag) {
+      applyImgSrc(imgUrl)
+    } else if (bgMode === 'insert') {
+      insertImgChild(imgUrl)
+    } else {
+      applyBgImage(imgUrl)
+    }
+  }
+
+  const modeLabel = isImgTag
+    ? 'Click a photo to replace this image'
+    : bgMode === 'cover'
+      ? 'Click a photo to set as background (cover)'
+      : bgMode === 'contain'
+        ? 'Click a photo to set as background (contain)'
+        : 'Click a photo to insert <img> inside this element'
+
   return (
-    <div className="rounded-lg border border-purple-500/40 bg-purple-500/5 p-2.5 space-y-2">
+    <div className="rounded-lg border border-purple-500/40 bg-purple-500/5 p-2.5 space-y-2.5">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <span className="text-purple-400">🖼</span>
-          <span className="text-[10px] font-semibold text-purple-300 uppercase tracking-wide">Image Source</span>
+          <span className="text-[10px] font-semibold text-purple-300 uppercase tracking-wide">
+            {isImgTag ? 'Replace Image' : 'Add Image'}
+          </span>
         </div>
         <button
           onClick={() => fileInputRef.current?.click()}
@@ -105,22 +195,64 @@ function ImagePicker({
           {uploading ? '↻ Uploading…' : '+ Upload'}
         </button>
       </div>
+
       <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={e => upload(e.target.files)} />
+
+      {/* Mode selector for container elements */}
+      {isBgCapable && !isImgTag && (
+        <div className="space-y-1">
+          <p className="text-[10px] text-muted-foreground">How to apply:</p>
+          <div className="flex gap-1">
+            {([
+              { id: 'cover',   label: '⬛ BG Cover',   title: 'Fill the element as a background (best for sections/cards)' },
+              { id: 'contain', label: '⬜ BG Contain',  title: 'Fit inside the element as a background' },
+              { id: 'insert',  label: '🖼 Insert <img>', title: 'Add an <img> tag inside this element' },
+            ] as const).map(m => (
+              <button
+                key={m.id}
+                onClick={() => setBgMode(m.id)}
+                title={m.title}
+                className={`flex-1 py-1 text-[10px] rounded border transition-colors ${
+                  bgMode === m.id
+                    ? 'border-purple-500 bg-purple-600/30 text-purple-200'
+                    : 'border-border text-muted-foreground hover:text-foreground hover:border-purple-500/40'
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Image grid */}
       {loading ? (
-        <p className="text-[10px] text-muted-foreground text-center py-2">Loading…</p>
+        <p className="text-[10px] text-muted-foreground text-center py-3">Loading…</p>
       ) : images.length === 0 ? (
-        <p className="text-[10px] text-muted-foreground text-center py-2">No images yet. Upload one above.</p>
+        <div className="text-center py-3">
+          <p className="text-[10px] text-muted-foreground">No images uploaded yet.</p>
+          <p className="text-[10px] text-muted-foreground/60 mt-0.5">Click "+ Upload" above to add photos.</p>
+        </div>
       ) : (
-        <div className="grid grid-cols-3 gap-1.5 max-h-48 overflow-y-auto">
+        <div className="grid grid-cols-3 gap-1.5 max-h-52 overflow-y-auto">
           {images.map(img => (
-            <button key={img.url} onClick={() => applySrc(img.url)} title={img.filename}>
+            <button
+              key={img.url}
+              onClick={() => applyImage(img.url)}
+              title={img.filename}
+              className="group relative rounded overflow-hidden border-2 border-border hover:border-purple-400 transition-colors focus:outline-none focus:border-purple-400"
+            >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={img.url} alt={img.filename} className="w-full aspect-square object-cover rounded border border-border hover:border-purple-400 transition-colors" />
+              <img src={img.url} alt={img.filename} className="w-full aspect-square object-cover" />
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                <span className="text-white text-[10px] font-semibold bg-black/60 px-1.5 py-0.5 rounded">Use</span>
+              </div>
             </button>
           ))}
         </div>
       )}
-      <p className="text-[10px] text-muted-foreground/60">Click a photo to replace this image.</p>
+
+      <p className="text-[10px] text-muted-foreground/60">{modeLabel}</p>
     </div>
   )
 }
@@ -483,7 +615,8 @@ export default function VisualEditorPanel() {
 
   const isTextEl = TEXT_TAGS.includes(tagName)
   const isLinkable = LINKABLE_TAGS.includes(tagName)
-  const isImg = tagName === 'img'
+  // Show image picker for <img> tags AND any container element that can hold a bg image
+  const showImagePicker = tagName === 'img' || BG_IMAGE_TAGS.includes(tagName)
 
   return (
     <div className="space-y-0 text-xs overflow-y-auto">
@@ -507,8 +640,8 @@ export default function VisualEditorPanel() {
         </button>
       </div>
 
-      {/* Image source picker — shown when an <img> is selected */}
-      {isImg && project && (
+      {/* Image picker — shown for <img>, div, section, header, footer, etc. */}
+      {showImagePicker && project && (
         <ImagePicker
           code={code}
           tagName={tagName}
