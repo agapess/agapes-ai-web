@@ -34,9 +34,11 @@ export async function orchestrate(req: OrchestratorRequest, res: Response, maxRe
   while (attempt < maxRetries) {
     attempt++
 
-    const userMessage = attempt === 1
+    // On retry: append the error hint to the BASE message, not the full injected
+    // message — contextBuilder will re-inject the current code around it
+    const baseMessage = attempt === 1
       ? req.message
-      : `${req.message}\n\n[Previous attempt failed: ${lastError}. Please provide a valid React component in a \`\`\`jsx code block.]`
+      : `${req.message}\n\n[Previous attempt failed: ${lastError}. Output the COMPLETE component — do not truncate or use placeholders.]`
 
     // Emit retry signal to the user
     if (attempt > 1) {
@@ -44,7 +46,7 @@ export async function orchestrate(req: OrchestratorRequest, res: Response, maxRe
     }
 
     const messages = buildMessages({
-      userMessage,
+      userMessage: baseMessage,
       history: req.history,
       projectContext: req.projectContext,
       customInstructions: req.customInstructions,

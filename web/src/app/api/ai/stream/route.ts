@@ -34,9 +34,10 @@ export async function POST(req: NextRequest) {
     message: string
     provider?: string
     customInstructions?: string
+    currentCode?: string   // live JSX from the frontend — always the active page
   }
 
-  const { projectId, message, provider: preferredProvider, customInstructions } = body
+  const { projectId, message, provider: preferredProvider, customInstructions, currentCode } = body
 
   const resolved = resolveProvider(session.user.id, session.user.plan, preferredProvider)
   if (!resolved) {
@@ -64,10 +65,21 @@ export async function POST(req: NextRequest) {
         : []
   }
 
-  const homePage = db.select({ content: pages.content }).from(pages)
-    .where(and(eq(pages.projectId, projectId), eq(pages.isHomePage, true)))
-    .get()
-  const projectContext = homePage?.content ? JSON.stringify(homePage.content) : undefined
+  // Use the live code sent from the frontend (always the active page, includes
+  // visual edits). Fall back to DB home page only when the page is brand new.
+  let projectContext: string | undefined = currentCode && currentCode.trim().length > 20
+    ? currentCode
+    : undefined
+
+  if (!projectContext) {
+    const homePage = db.select({ content: pages.content }).from(pages)
+      .where(and(eq(pages.projectId, projectId), eq(pages.isHomePage, true)))
+      .get()
+    const raw = homePage?.content
+    if (raw && typeof raw === 'string' && raw.trim().length > 20) {
+      projectContext = raw
+    }
+  }
 
   // Load brand settings from project
   const project = db.select({ settings: projects.settings }).from(projects)

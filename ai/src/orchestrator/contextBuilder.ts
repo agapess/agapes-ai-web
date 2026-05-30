@@ -49,21 +49,22 @@ When a user describes what they want, your job is to:
 9. For interactive pages (e-commerce, dashboards, portfolios), use useState to show real interactivity.
 10. Fill in realistic placeholder content — real-looking text, proper section structure.
 
-─── PRECISION EDIT RULES (CRITICAL) ─────────────────────────────────────────
+─── EDITING EXISTING CODE (MOST IMPORTANT RULE) ──────────────────────────────
 
-When the user asks for a SMALL change (add a link, change text, update a color,
-swap an icon's URL), follow these rules WITHOUT EXCEPTION:
+When the user message includes a ```jsx code block labeled "CURRENT EXACT code":
 
-• Copy the ENTIRE existing component code first, then make ONLY the requested change.
-• NEVER regenerate, simplify, or rewrite sections you were not asked to touch.
-• SVG path data (d="M ..."), viewBox, and icon markup MUST be copied character-for-character.
-  Even one missing character in an SVG path breaks the icon permanently.
-• To add a URL to a social icon: wrap the existing <svg>...</svg> in
-  <a href="YOUR_URL" target="_blank" rel="noopener noreferrer">…</a>
-  Do NOT remove or modify any part of the SVG.
-• If the existing code has 200 lines, your output must also have ~200 lines.
-  A shorter output means you deleted content — that is always wrong.
-• When in doubt, copy more, not less.
+1. COPY THAT CODE VERBATIM as your starting point.
+2. Make ONLY the specific change the user requested.
+3. Output the COMPLETE file — every line, nothing removed.
+4. NEVER rewrite, reformat, simplify, or restructure untouched sections.
+5. NEVER replace working sections with placeholders or comments like "// rest of code".
+6. SVG path data (d="M ...") MUST be reproduced character-for-character.
+7. If the existing code is 300 lines, your output must also be ~300 lines.
+   Fewer lines = deleted content = wrong.
+8. Images, links, custom colors, and visual edits the user made are precious —
+   preserve them exactly.
+
+This rule overrides everything else. When in doubt: copy more, change less.
 
 ─── DESIGN STANDARDS ─────────────────────────────────────────────────────────
 
@@ -169,13 +170,24 @@ Show a success message when submitted === true (replace the form with a thank-yo
     systemContent += `\n\n─── CUSTOM INSTRUCTIONS FROM PROJECT OWNER ─────────────────────────────────\n${customInstructions}`
   }
 
-  if (projectContext) {
-    systemContent += `\n\n─── CURRENT PAGE STATE ───────────────────────────────────────────────────────\nThe page already has content (JSON below). Build on top of it or replace it as the user requests.\n${projectContext}`
+  // Build the final user message — inject existing code INSIDE the user turn
+  // so the model physically sees it right before the instruction. This is far
+  // more reliable than putting it in the system prompt where it can be ignored.
+  let finalUserMessage = userMessage
+
+  if (projectContext && projectContext.trim().length > 20) {
+    finalUserMessage = `Here is the CURRENT EXACT code for this page. You MUST start from this code and make only the changes I request. Do NOT rewrite, simplify, or restructure anything that wasn't asked about. Copy everything else character-for-character.
+
+\`\`\`jsx
+${projectContext}
+\`\`\`
+
+My request: ${userMessage}`
   }
 
   return [
     { role: 'system', content: systemContent },
     ...history,
-    { role: 'user', content: userMessage },
+    { role: 'user', content: finalUserMessage },
   ]
 }

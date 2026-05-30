@@ -157,11 +157,20 @@ export default function ChatPanel() {
     const abort = new AbortController()
     abortRef.current = abort
 
+    // Send the current live code from the store — always the right page,
+    // always includes visual edits made outside the AI chat
+    const currentCode = useBuilderStore.getState().previewCode || ''
+
     try {
       const res = await fetch('/api/ai/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId: currentProject.id, message: content, customInstructions: currentInstructions || undefined }),
+        body: JSON.stringify({
+          projectId: currentProject.id,
+          message: content,
+          customInstructions: currentInstructions || undefined,
+          currentCode: currentCode || undefined,
+        }),
         signal: abort.signal,
       })
 
