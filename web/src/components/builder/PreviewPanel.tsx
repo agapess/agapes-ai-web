@@ -5,10 +5,27 @@ import {
   SandpackLayout,
   SandpackPreview,
   SandpackCodeEditor,
+  useSandpack,
 } from '@codesandbox/sandpack-react'
 import { useBuilderStore } from '@/store/builderStore'
 import { reorderSections, deleteSection, insertSectionAfter } from '@/lib/jsxSectionParser'
 import { swapTailwindClass, replaceText } from '@/lib/tailwindMutator'
+
+// ── Live file sync ────────────────────────────────────────────────────────────
+// Sandpack ignores `files` prop changes after mount. This component sits inside
+// the provider and calls updateFile() whenever the code changes so the preview
+// stays in sync without a full remount.
+function SandpackFileSync({ code }: { code: string }) {
+  const { sandpack } = useSandpack()
+  const prevRef = useRef('')
+  useEffect(() => {
+    if (code !== prevRef.current) {
+      prevRef.current = code
+      sandpack.updateFile('/App.js', code)
+    }
+  }, [code, sandpack])
+  return null
+}
 
 // ── Sandpack starter code ─────────────────────────────────────────────────────
 
@@ -619,6 +636,8 @@ export default function PreviewPanel() {
             files={sandpackFiles}
             options={{ externalResources: ['https://cdn.tailwindcss.com'] }}
           >
+            {/* Keeps /App.js in sync with previewCode without remounting */}
+            <SandpackFileSync code={code} />
             <SandpackLayout style={{ height: sandpackHeight, borderRadius: 0 }}>
               {activePreviewTab === 'preview'
                 ? <SandpackPreview style={{ height: sandpackHeight }} showOpenInCodeSandbox={false} showNavigator={false} />
