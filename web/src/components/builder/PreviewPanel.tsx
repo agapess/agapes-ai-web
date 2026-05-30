@@ -454,6 +454,7 @@ export default function PreviewPanel() {
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const [uploadedImages, setUploadedImages] = useState<Array<{ url: string; filename: string }>>([])
   const [uploading, setUploading] = useState(false)
+  const [selectedImgUrl, setSelectedImgUrl] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -660,16 +661,25 @@ export default function PreviewPanel() {
     setUploading(false)
   }, [project])
 
-  /** Insert an uploaded image into the page code as an <img> tag */
-  const insertImage = useCallback((imgUrl: string) => {
-    const imgTag = `<img src="${imgUrl}" alt="Uploaded image" className="max-w-full h-auto rounded-lg" />`
-    // Insert before the closing </div> of the root div — simple append strategy
-    const closingDiv = code.lastIndexOf('</div>')
-    if (closingDiv >= 0) {
-      const updated = code.slice(0, closingDiv) + '\n      ' + imgTag + '\n    ' + code.slice(closingDiv)
-      saveCode(updated)
+  /** Send an AI prompt to place an image in a specific way */
+  const useImageWithAI = useCallback((imgUrl: string, placement: string) => {
+    const absoluteUrl = typeof window !== 'undefined'
+      ? imgUrl.startsWith('http') ? imgUrl : `${window.location.origin}${imgUrl}`
+      : imgUrl
+
+    const prompts: Record<string, string> = {
+      hero:     `Replace the hero section's background or main visual with this image: ${absoluteUrl}. Use it as a full-width hero image with object-fit cover. Keep all existing text and buttons overlaid on top. The image URL is exactly: ${absoluteUrl}`,
+      gallery:  `Add a new photo gallery section or insert this image into the existing gallery: ${absoluteUrl}. Display it as a card with rounded corners and a subtle shadow. The image URL is exactly: ${absoluteUrl}`,
+      section:  `Add a new section featuring this image: ${absoluteUrl}. Layout: image on one side, descriptive text on the other (50/50 split, stacked on mobile). Add a heading and 2-3 lines of placeholder text. The image URL is exactly: ${absoluteUrl}`,
+      replace:  `Find the most appropriate existing <img> tag or image placeholder div in the page and replace it with this real image: ${absoluteUrl}. Use object-fit cover, keep the same sizing. The image URL is exactly: ${absoluteUrl}`,
     }
-  }, [code, saveCode])
+
+    const prompt = prompts[placement]
+    if (!prompt) return
+    setShowEditPanel(false)
+    setSelectedImgUrl(null)
+    window.dispatchEvent(new CustomEvent('quick-edit', { detail: { prompt } }))
+  }, [setShowEditPanel])
 
   const EDIT_TABS = [
     { key: 'text', label: '✏️ Text' },
@@ -875,60 +885,105 @@ export default function PreviewPanel() {
                       className="hidden"
                       onChange={e => handleImageUpload(e.target.files)}
                     />
-                    {/* Upload button */}
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={uploading}
-                      className="w-full flex flex-col items-center justify-center gap-2 py-5 border-2 border-dashed border-border rounded-xl text-muted-foreground hover:border-primary/50 hover:text-foreground hover:bg-secondary/30 transition-colors disabled:opacity-50"
-                    >
-                      {uploading ? (
-                        <>
-                          <span className="text-xl animate-spin">↻</span>
-                          <span className="text-xs">Uploading…</span>
-                        </>
-                      ) : (
-                        <>
-                          <span className="text-2xl">📁</span>
-                          <span className="text-xs font-medium">Upload images</span>
-                          <span className="text-[10px] text-muted-foreground/60">JPG, PNG, WebP, GIF, SVG — max 10 MB</span>
-                        </>
-                      )}
-                    </button>
 
-                    {/* Uploaded image grid */}
-                    {uploadedImages.length === 0 ? (
-                      <p className="text-xs text-muted-foreground text-center py-4">No images uploaded yet.</p>
-                    ) : (
-                      <>
-                        <p className="text-[10px] text-muted-foreground">Click an image to insert it into the page, or copy the URL.</p>
-                        <div className="grid grid-cols-2 gap-2">
-                          {uploadedImages.map(img => (
-                            <div key={img.url} className="group relative">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={img.url}
-                                alt={img.filename}
-                                className="w-full aspect-square object-cover rounded-lg border border-border group-hover:border-primary/50 transition-colors"
-                              />
-                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/50 rounded-lg transition-colors flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100">
-                                <button
-                                  onClick={() => insertImage(img.url)}
-                                  className="px-2 py-1 bg-primary text-white rounded text-[10px] font-medium hover:bg-primary/80 transition-colors"
-                                  title="Insert into page"
-                                >
-                                  Insert
-                                </button>
-                                <button
-                                  onClick={() => navigator.clipboard.writeText(img.url)}
-                                  className="px-2 py-1 bg-secondary text-foreground rounded text-[10px] font-medium hover:bg-secondary/80 transition-colors"
-                                  title="Copy URL"
-                                >
-                                  Copy
-                                </button>
-                              </div>
-                            </div>
-                          ))}
+                    {/* Step 2: Placement picker — shown when an image is selected */}
+                    {selectedImgUrl ? (
+                      <div className="space-y-3">
+                        {/* Selected image preview */}
+                        <div className="relative">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={selectedImgUrl}
+                            alt="Selected"
+                            className="w-full h-28 object-cover rounded-lg border border-primary/60"
+                          />
+                          <button
+                            onClick={() => setSelectedImgUrl(null)}
+                            className="absolute top-1.5 right-1.5 w-5 h-5 bg-black/60 hover:bg-black/80 text-white rounded-full text-xs flex items-center justify-center transition-colors"
+                          >×</button>
+                          <div className="absolute bottom-1.5 left-1.5 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded font-medium">
+                            Selected ✓
+                          </div>
                         </div>
+
+                        <p className="text-xs font-semibold text-foreground">How do you want to use this image?</p>
+                        <p className="text-[10px] text-muted-foreground -mt-1">AI will place it correctly for you.</p>
+
+                        {/* Placement options */}
+                        {[
+                          { id: 'hero',    icon: '🖼',  label: 'Hero / Banner',       desc: 'Full-width background at the top of the page' },
+                          { id: 'section', icon: '↔',   label: 'Image + Text section', desc: 'Side-by-side image and description text' },
+                          { id: 'gallery', icon: '⊞',   label: 'Gallery card',         desc: 'Add to a photo gallery or card grid' },
+                          { id: 'replace', icon: '⟳',   label: 'Replace a placeholder', desc: 'Swap out an existing placeholder or image' },
+                        ].map(opt => (
+                          <button
+                            key={opt.id}
+                            onClick={() => useImageWithAI(selectedImgUrl, opt.id)}
+                            className="w-full flex items-start gap-3 px-3 py-2.5 rounded-lg border border-border hover:border-primary/50 hover:bg-secondary/50 transition-all text-left group"
+                          >
+                            <span className="text-lg shrink-0 mt-0.5">{opt.icon}</span>
+                            <div>
+                              <p className="text-xs font-medium text-foreground group-hover:text-primary transition-colors">{opt.label}</p>
+                              <p className="text-[10px] text-muted-foreground">{opt.desc}</p>
+                            </div>
+                          </button>
+                        ))}
+
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(
+                              typeof window !== 'undefined' && !selectedImgUrl.startsWith('http')
+                                ? `${window.location.origin}${selectedImgUrl}`
+                                : selectedImgUrl
+                            )
+                          }}
+                          className="w-full py-1.5 text-[10px] text-muted-foreground hover:text-foreground border border-border rounded-lg transition-colors"
+                        >
+                          📋 Copy image URL to clipboard
+                        </button>
+                      </div>
+                    ) : (
+                      /* Step 1: Upload + pick an image */
+                      <>
+                        <button
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={uploading}
+                          className="w-full flex flex-col items-center justify-center gap-2 py-4 border-2 border-dashed border-border rounded-xl text-muted-foreground hover:border-primary/50 hover:text-foreground hover:bg-secondary/30 transition-colors disabled:opacity-50"
+                        >
+                          {uploading ? (
+                            <><span className="text-xl animate-spin">↻</span><span className="text-xs">Uploading…</span></>
+                          ) : (
+                            <><span className="text-2xl">📁</span><span className="text-xs font-medium">Upload image</span><span className="text-[10px] text-muted-foreground/60">JPG, PNG, WebP, GIF, SVG — max 10 MB</span></>
+                          )}
+                        </button>
+
+                        {uploadedImages.length === 0 ? (
+                          <p className="text-xs text-muted-foreground text-center py-4">No images uploaded yet.<br/>Upload one above to get started.</p>
+                        ) : (
+                          <>
+                            <p className="text-[10px] text-muted-foreground">↓ Click an image to select it, then choose where to place it</p>
+                            <div className="grid grid-cols-2 gap-2">
+                              {uploadedImages.map(img => (
+                                <button
+                                  key={img.url}
+                                  onClick={() => setSelectedImgUrl(img.url)}
+                                  className="group relative focus:outline-none"
+                                  title={img.filename}
+                                >
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={img.url}
+                                    alt={img.filename}
+                                    className="w-full aspect-square object-cover rounded-lg border-2 border-border group-hover:border-primary/70 transition-colors"
+                                  />
+                                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 rounded-lg transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                                    <span className="bg-black/70 text-white text-[10px] px-2 py-1 rounded font-medium">Select</span>
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          </>
+                        )}
                       </>
                     )}
                   </div>
