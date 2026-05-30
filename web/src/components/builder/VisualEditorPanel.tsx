@@ -114,39 +114,47 @@ function ImagePicker({
     onSave(code.slice(0, ts) + newTag + code.slice(te))
   }
 
-  /** Mode B — container: set background-image via inline style */
+  /** Mode B — container: set background-image via inline style.
+   *
+   * Strategy: remove any existing style={{...}} attribute entirely using
+   * brace-depth tracking (regex is unsafe because CSS values contain commas,
+   * e.g. linear-gradient(to right, red, blue)), then inject a clean new one
+   * before the closing > or />.
+   */
   function applyBgImage(imgUrl: string) {
     const bounds = findTagBounds(code, tagName, className)
     if (!bounds) return
     const [ts, te] = bounds
-    const openTag = code.slice(ts, te)
+    let openTag = code.slice(ts, te)
     const absUrl = absoluteUrl(imgUrl)
 
-    const bgStyleValue = bgMode === 'cover'
-      ? `url('${absUrl}') center/cover no-repeat`
-      : `url('${absUrl}') center/contain no-repeat`
+    const newStyleAttr = ` style={{backgroundImage:"url('${absUrl}')",backgroundSize:'${bgMode}',backgroundPosition:'center',backgroundRepeat:'no-repeat'}}`
 
-    // If style prop already exists, inject into it
-    if (/\bstyle=\{/.test(openTag)) {
-      // Insert backgroundImage into existing style object
-      const newTag = openTag.replace(
-        /\bstyle=\{\{([\s\S]*?)\}\}/,
-        (_m, inner) => {
-          // Remove any existing backgroundImage entry
-          const cleaned = inner.replace(/,?\s*background(?:Image|image)?:[^,}]+/g, '').trim()
-          const sep = cleaned ? ', ' : ''
-          return `style={{${cleaned}${sep}backgroundImage:"url('${absUrl}')", backgroundSize:'${bgMode}', backgroundPosition:'center', backgroundRepeat:'no-repeat'}}`
-        },
-      )
-      onSave(code.slice(0, ts) + newTag + code.slice(te))
-    } else {
-      // Add new style prop before the closing > of the opening tag
-      const insertBefore = te - 1  // position of '>'
-      const isSelfClose = code[insertBefore - 1] === '/'
-      const insertAt = isSelfClose ? insertBefore - 1 : insertBefore
-      const styleAttr = ` style={{backgroundImage:"url('${absUrl}')", backgroundSize:'${bgMode}', backgroundPosition:'center', backgroundRepeat:'no-repeat'}}`
-      onSave(code.slice(0, ts) + openTag.slice(0, insertAt - ts) + styleAttr + openTag.slice(insertAt - ts) + code.slice(te))
+    // ── Step 1: strip any existing style={...} using brace-depth scan ──────
+    const styleIdx = openTag.search(/\bstyle=\{/)
+    if (styleIdx >= 0) {
+      let i = styleIdx + 'style='.length
+      let depth = 0
+      while (i < openTag.length) {
+        const ch = openTag[i]
+        if (ch === '{') depth++
+        else if (ch === '}') { depth--; if (depth === 0) { i++; break } }
+        i++
+      }
+      // Remove style attr + one leading space if present
+      const removeFrom = (styleIdx > 0 && openTag[styleIdx - 1] === ' ') ? styleIdx - 1 : styleIdx
+      openTag = openTag.slice(0, removeFrom) + openTag.slice(i)
     }
+
+    // ── Step 2: insert new style attr before closing > or /> ───────────────
+    const isSelfClose = openTag.trimEnd().endsWith('/>')
+    const insertPos = isSelfClose
+      ? openTag.lastIndexOf('/>')
+      : openTag.lastIndexOf('>')
+    if (insertPos < 0) return
+
+    const newOpenTag = openTag.slice(0, insertPos) + newStyleAttr + openTag.slice(insertPos)
+    onSave(code.slice(0, ts) + newOpenTag + code.slice(te))
   }
 
   /** Mode C — insert <img> as first child of container */
