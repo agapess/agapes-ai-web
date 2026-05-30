@@ -173,16 +173,22 @@ Show a success message when submitted === true (replace the form with a thank-yo
   // Build the final user message — inject existing code INSIDE the user turn
   // so the model physically sees it right before the instruction. This is far
   // more reliable than putting it in the system prompt where it can be ignored.
+  //
+  // NOTE: Use a variable for the fence so esbuild doesn't misparse the
+  // backtick sequence inside a template literal.
+  const fence = '```'
   let finalUserMessage = userMessage
 
   if (projectContext && projectContext.trim().length > 20) {
-    finalUserMessage = `Here is the CURRENT EXACT code for this page. You MUST start from this code and make only the changes I request. Do NOT rewrite, simplify, or restructure anything that wasn't asked about. Copy everything else character-for-character.
-
-\`\`\`jsx
-${projectContext}
-\`\`\`
-
-My request: ${userMessage}`
+    finalUserMessage = [
+      'Here is the CURRENT EXACT code for this page. You MUST start from this code and make only the changes I request. Do NOT rewrite, simplify, or restructure anything that was not asked about. Copy everything else character-for-character.',
+      '',
+      fence + 'jsx',
+      projectContext,
+      fence,
+      '',
+      'My request: ' + userMessage,
+    ].join('\n')
   }
 
   return [
