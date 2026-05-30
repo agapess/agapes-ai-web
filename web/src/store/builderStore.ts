@@ -10,6 +10,15 @@ export interface BuilderPage {
   isHomePage: boolean
 }
 
+export interface SelectedElement {
+  bid: string
+  tagName: string
+  className: string
+  textContent: string
+  rect: { top: number; left: number; width: number; height: number }
+  sectionBid: string | null
+}
+
 interface Project {
   id: string
   name: string
@@ -28,8 +37,13 @@ interface BuilderState {
   customInstructions: string
   projectSettings: Record<string, unknown>
   previewTheme: 'dark' | 'light'
-  /** Controls which tab is shown in PreviewPanel — can be flipped externally (e.g. auto-switch after AI build) */
+  /** Controls which tab is shown in PreviewPanel */
   activePreviewTab: 'preview' | 'code'
+  /** Visual editor mode — click-to-select elements */
+  visualEditMode: boolean
+  /** Currently selected element in visual editor */
+  selectedElement: SelectedElement | null
+
   setProject: (project: Project) => void
   setPages: (pages: BuilderPage[]) => void
   setActivePage: (page: BuilderPage) => void
@@ -41,6 +55,8 @@ interface BuilderState {
   setProjectSettings: (settings: Record<string, unknown>) => void
   setPreviewTheme: (theme: 'dark' | 'light') => void
   setActivePreviewTab: (tab: 'preview' | 'code') => void
+  setVisualEditMode: (on: boolean) => void
+  setSelectedElement: (el: SelectedElement | null) => void
 }
 
 export const useBuilderStore = create<BuilderState>((set, get) => ({
@@ -54,20 +70,20 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   projectSettings: {},
   previewTheme: 'dark',
   activePreviewTab: 'preview',
+  visualEditMode: false,
+  selectedElement: null,
+
   setProject: (project) => set({ project }),
   setPages: (pages) => {
-    // Normalise all page content to strings so downstream code never sees [] or null
     const normPages = pages.map(p => ({
       ...p,
       content: typeof p.content === 'string' ? p.content : '',
     }))
     const currentActive = get().activePage
-    // Keep active page reference current if it's already in the new list
     const newActive = currentActive
       ? (normPages.find(p => p.id === currentActive.id) ?? normPages.find(p => p.isHomePage) ?? normPages[0] ?? null)
       : (normPages.find(p => p.isHomePage) ?? normPages[0] ?? null)
     set({ pages: normPages, activePage: newActive })
-    // Don't touch previewCode here — callers that want to switch preview call setActivePage
   },
   setActivePage: (page) => {
     const content = typeof page.content === 'string' ? page.content : ''
@@ -84,4 +100,6 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   setProjectSettings: (projectSettings) => set({ projectSettings }),
   setPreviewTheme: (previewTheme) => set({ previewTheme }),
   setActivePreviewTab: (activePreviewTab) => set({ activePreviewTab }),
+  setVisualEditMode: (visualEditMode) => set({ visualEditMode, selectedElement: null }),
+  setSelectedElement: (selectedElement) => set({ selectedElement }),
 }))
