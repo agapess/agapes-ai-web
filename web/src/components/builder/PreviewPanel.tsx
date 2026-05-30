@@ -130,17 +130,57 @@ export function injectDragHandles() {
 export function attachListeners() {
   document.addEventListener('click', function(e) {
     var el = e.target;
+
+    // SVG children (path, circle, g, etc.) have SVGAnimatedString className,
+    // not a plain string. Walk up until we find an element with a usable
+    // className OR a meaningful tag (a, button, div, section).
+    var USEFUL_TAGS = ['a','button','div','section','header','footer','nav','span','li','article'];
+    var walked = el;
+    while (walked && walked !== document.body) {
+      var tag = walked.tagName ? walked.tagName.toLowerCase() : '';
+      // Accept if it has a real string className or is a useful tag with data-bid
+      var cn = walked.className;
+      var hasClass = typeof cn === 'string' && cn.trim() !== '';
+      var hasBid = walked.getAttribute && walked.getAttribute(ATTR);
+      if (hasBid && (hasClass || USEFUL_TAGS.indexOf(tag) >= 0)) {
+        el = walked;
+        break;
+      }
+      walked = walked.parentElement;
+    }
+
     var bid = el.getAttribute && el.getAttribute(ATTR);
     if (!bid) return;
+
+    // Resolve className safely for SVG elements
+    var cn = el.className;
+    var resolvedClass = typeof cn === 'string' ? cn : (cn && cn.baseVal) ? cn.baseVal : '';
+
+    // Find the nearest <a> ancestor (for icon links)
+    var nearestAnchor = null;
+    var cur = el.parentElement;
+    while (cur && cur !== document.body) {
+      if (cur.tagName && cur.tagName.toLowerCase() === 'a') {
+        nearestAnchor = {
+          bid: cur.getAttribute(ATTR),
+          href: cur.getAttribute('href') || '',
+          className: (function(c){ return typeof c === 'string' ? c : (c && c.baseVal) ? c.baseVal : '' })(cur.className),
+        };
+        break;
+      }
+      cur = cur.parentElement;
+    }
+
     var rect = el.getBoundingClientRect();
     window.parent.postMessage({
       type: 'builder:click',
       bid: bid,
       tagName: el.tagName.toLowerCase(),
-      className: typeof el.className === 'string' ? el.className : '',
+      className: resolvedClass,
       textContent: (el.textContent || '').slice(0, 200),
       rect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
       sectionBid: getTopLevelSectionBid(el),
+      nearestAnchor: nearestAnchor,
     }, '*');
   }, true);
 
@@ -536,6 +576,7 @@ export default function PreviewPanel() {
       }
 
       if (msg.type === 'builder:click') {
+        const anchor = msg.nearestAnchor as { bid: string | null; href: string; className: string } | null
         setSelectedElement({
           bid: String(msg.bid ?? ''),
           tagName: String(msg.tagName ?? ''),
@@ -543,6 +584,7 @@ export default function PreviewPanel() {
           textContent: String(msg.textContent ?? ''),
           rect: msg.rect as { top: number; left: number; width: number; height: number },
           sectionBid: msg.sectionBid ? String(msg.sectionBid) : null,
+          nearestAnchor: anchor ?? null,
         })
         sendToIframe({ type: 'builder:highlight', bid: msg.bid })
       }

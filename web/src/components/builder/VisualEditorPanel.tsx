@@ -585,6 +585,81 @@ const RADII = ['','sm','md','lg','xl','2xl','full']
 const RADIUS_LABELS = ['None','SM','MD','LG','XL','2XL','Full']
 const TEXT_TAGS = ['h1','h2','h3','h4','h5','h6','p','button','a','span','li','label']
 
+// ── Anchor href editor — for icon links and SVG-wrapped anchors ───────────────
+// Edits the href attribute directly on the <a> tag identified by its className.
+// Uses the same safe character-level scanner as the main LinkEditor.
+
+function AnchorHrefEditor({
+  code,
+  anchorClassName,
+  currentHref,
+  onSave,
+}: {
+  code: string
+  anchorClassName: string
+  currentHref: string
+  onSave: (updated: string) => void
+}) {
+  const [value, setValue] = useState(currentHref)
+  const savedRef = useRef(currentHref)
+
+  // Re-sync when a different element is selected
+  useEffect(() => {
+    setValue(currentHref)
+    savedRef.current = currentHref
+  }, [anchorClassName, currentHref])
+
+  function apply(url: string) {
+    const trimmed = url.trim()
+    // Always target the <a> tag specifically
+    const updated = applyHrefToCode(code, 'a', anchorClassName, trimmed)
+    if (updated !== code) {
+      onSave(updated)
+      savedRef.current = trimmed
+    }
+  }
+
+  const SOCIAL_HINTS = [
+    { label: 'Instagram', url: 'https://instagram.com/yourhandle' },
+    { label: 'Twitter/X',  url: 'https://x.com/yourhandle' },
+    { label: 'Facebook',  url: 'https://facebook.com/yourpage' },
+    { label: 'LinkedIn',  url: 'https://linkedin.com/in/yourprofile' },
+    { label: 'YouTube',   url: 'https://youtube.com/@yourchannel' },
+    { label: 'TikTok',    url: 'https://tiktok.com/@yourhandle' },
+    { label: 'GitHub',    url: 'https://github.com/yourusername' },
+  ]
+
+  return (
+    <div className="space-y-2">
+      <input
+        value={value}
+        onChange={e => setValue(e.target.value)}
+        onBlur={e => apply(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter') { apply(value); e.currentTarget.blur() }
+          if (e.key === 'Escape') { setValue(savedRef.current); e.currentTarget.blur() }
+        }}
+        placeholder="https://instagram.com/yourhandle"
+        className="w-full px-2 py-1.5 text-xs bg-secondary border border-border rounded text-foreground placeholder-muted-foreground/50 focus:outline-none focus:border-indigo-400 font-mono"
+      />
+      <div className="flex flex-wrap gap-1">
+        {SOCIAL_HINTS.map(h => (
+          <button
+            key={h.label}
+            onClick={() => { setValue(h.url); apply(h.url) }}
+            className="text-[10px] px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:text-foreground hover:border-indigo-400/50 transition-colors"
+          >
+            {h.label}
+          </button>
+        ))}
+      </div>
+      <p className="text-[10px] text-muted-foreground/60">
+        Press Enter or click away to save. Edits only the link URL — icon artwork is never changed.
+      </p>
+    </div>
+  )
+}
+
 // ── Color picker sub-component ────────────────────────────────────────────────
 
 function ColorPicker({ label, onSelect }: { label: string; onSelect: (cls: string) => void }) {
@@ -691,6 +766,10 @@ export default function VisualEditorPanel() {
   const isLinkable = LINKABLE_TAGS.includes(tagName)
   // Show image picker for <img> tags AND any container element that can hold a bg image
   const showImagePicker = tagName === 'img' || BG_IMAGE_TAGS.includes(tagName)
+  // SVG elements: svg, path, circle, g, rect, polygon, polyline, line, ellipse, use
+  const isSvgElement = /^(svg|path|circle|g|rect|polygon|polyline|line|ellipse|use|defs|mask|clip)$/.test(tagName)
+  // Nearest <a> wrapping this element (populated by bridge for icon links)
+  const nearestAnchor = el.nearestAnchor
 
   return (
     <div className="space-y-0 text-xs overflow-y-auto">
@@ -703,7 +782,10 @@ export default function VisualEditorPanel() {
         <span className="font-mono bg-secondary px-2 py-0.5 rounded text-primary text-[10px]">
           &lt;{tagName}&gt;
         </span>
-        {!isLiteralClass && (
+        {isSvgElement && (
+          <span className="text-[10px] text-indigo-400 bg-indigo-900/30 px-1.5 py-0.5 rounded">SVG icon</span>
+        )}
+        {!isLiteralClass && !isSvgElement && (
           <span className="text-amber-400 text-[10px]">dynamic className — limited editing</span>
         )}
         <button
@@ -713,6 +795,33 @@ export default function VisualEditorPanel() {
           ✕ Deselect
         </button>
       </div>
+
+      {/* ── Icon / SVG link editor ─────────────────────────────────────────
+           Shown when the clicked element is inside an <a> tag (social icons,
+           icon buttons, etc.) — edits the href on the <a> directly          */}
+      {(isSvgElement || nearestAnchor) && (
+        <div className="rounded-lg border border-indigo-500/40 bg-indigo-500/5 p-2.5 space-y-2">
+          <div className="flex items-center gap-1.5">
+            <span className="text-indigo-400">🔗</span>
+            <span className="text-[10px] font-semibold text-indigo-300 uppercase tracking-wide">
+              {nearestAnchor ? 'Link on this icon' : 'SVG icon — no link yet'}
+            </span>
+          </div>
+          {nearestAnchor ? (
+            <AnchorHrefEditor
+              code={code}
+              anchorClassName={nearestAnchor.className}
+              currentHref={nearestAnchor.href}
+              onSave={saveCode}
+            />
+          ) : (
+            <p className="text-[10px] text-muted-foreground">
+              This SVG is not wrapped in an &lt;a&gt; tag yet.<br />
+              Ask AI: <em>"Add an Instagram link to the Instagram icon in the footer"</em>
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Image picker — shown for <img>, div, section, header, footer, etc. */}
       {showImagePicker && project && (

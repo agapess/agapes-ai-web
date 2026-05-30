@@ -19,6 +19,8 @@ export interface SelectedElement {
   textContent: string
   rect: { top: number; left: number; width: number; height: number }
   sectionBid: string | null
+  /** Nearest <a> ancestor, if any — used for editing icon links */
+  nearestAnchor?: { bid: string | null; href: string; className: string } | null
 }
 
 interface Project {
