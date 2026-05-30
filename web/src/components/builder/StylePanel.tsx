@@ -11,7 +11,7 @@ type Tab = 'brand' | 'visual' | 'components' | 'pages' | 'settings'
 
 const TAB_LABELS: Record<Tab, string> = {
   brand: '🎨',
-  visual: '⬡',
+  visual: '⬡ Edit',
   components: 'Sections',
   pages: 'Pages',
   settings: '⚙',
@@ -19,7 +19,7 @@ const TAB_LABELS: Record<Tab, string> = {
 
 const TAB_TITLES: Record<Tab, string> = {
   brand: 'Brand Settings',
-  visual: 'Visual Editor',
+  visual: 'Visual Edit',
   components: 'Add Sections',
   pages: 'Pages',
   settings: 'Project Settings',

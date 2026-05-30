@@ -734,12 +734,12 @@ export default function PreviewPanel() {
                     sendToIframe({ type: 'builder:clear' })
                   }
                 }}
-                title="Visual editor — click elements to edit"
+                title="Visual Edit — click elements to select and edit"
                 className={`flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors ${
                   visualEditMode ? 'bg-indigo-600 text-white' : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
                 }`}
               >
-                <span>⬡</span><span>Visual</span>
+                <span>⬡</span><span>Visual Edit</span>
               </button>
 
               {/* Text/Link/Style editor toggle */}

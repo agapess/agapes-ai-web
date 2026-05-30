@@ -92,6 +92,8 @@ export default function ChatPanel() {
   const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
+  // Ref always points to the latest sendMessageText — prevents stale closure in event handlers
+  const sendMessageTextRef = useRef<(override?: string) => Promise<void>>(async () => {})
   const {
     messages,
     streaming,
@@ -116,24 +118,35 @@ export default function ChatPanel() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, streamingContent, buildPhase])
 
-  // Listen for quick-edit events dispatched by PreviewPanel's toolbar
+  // Keep the ref in sync with the latest sendMessageText on every render
   useEffect(() => {
-    const handler = (e: Event) => {
+    sendMessageTextRef.current = sendMessageText
+  })
+
+  // Listen for quick-edit events — uses ref so it never captures a stale closure
+  useEffect(() => {
+    function handler(e: Event) {
       const { prompt } = (e as CustomEvent<{ prompt: string }>).detail
-      if (prompt && !streaming) {
-        addMessage({ role: 'user' as const, content: prompt, timestamp: Date.now() })
-        sendMessageText(prompt)
-      }
+      if (!prompt) return
+      // Read streaming from store directly to avoid stale closure
+      const isStreaming = useChatStore.getState().streaming
+      if (isStreaming) return
+      addMessage({ role: 'user' as const, content: prompt, timestamp: Date.now() })
+      sendMessageTextRef.current(prompt)
     }
     window.addEventListener('quick-edit', handler)
     return () => window.removeEventListener('quick-edit', handler)
+  // Register once — the ref always has the latest function
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [streaming])
+  }, [])
 
   /** Core send function — accepts an explicit prompt or falls back to the textarea value */
   async function sendMessageText(overrideContent?: string) {
     const content = (overrideContent ?? input).trim()
-    if (!content || streaming || !project) return
+    // Always read latest project/streaming from store so this never has a stale closure
+    const { project: currentProject, customInstructions: currentInstructions, activePage: currentActivePage } = useBuilderStore.getState()
+    const { streaming: currentStreaming } = useChatStore.getState()
+    if (!content || currentStreaming || !currentProject) return
 
     if (!overrideContent) setInput('')
     const newUserMsg = { role: 'user' as const, content, timestamp: Date.now() }
@@ -148,7 +161,7 @@ export default function ChatPanel() {
       const res = await fetch('/api/ai/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId: project.id, message: content, customInstructions: customInstructions || undefined }),
+        body: JSON.stringify({ projectId: currentProject.id, message: content, customInstructions: currentInstructions || undefined }),
         signal: abort.signal,
       })
 
@@ -186,9 +199,9 @@ export default function ChatPanel() {
               setBuildPhase('building')
               setPreviewCode(event.code)
               setActivePreviewTab('preview') // auto-switch to preview tab
-              if (activePage && project) {
-                updatePageContent(activePage.id, event.code)
-                fetch(`/api/pages/${project.id}/${activePage.id}`, {
+              if (currentActivePage && currentProject) {
+                updatePageContent(currentActivePage.id, event.code)
+                fetch(`/api/pages/${currentProject.id}/${currentActivePage.id}`, {
                   method: 'PATCH',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ content: event.code }),
@@ -198,12 +211,12 @@ export default function ChatPanel() {
               success = true
               finalizeStreamingMessage(lastGeneratedCode)
               // Save to version history
-              if (lastGeneratedCode && project && activePage) {
-                fetch(`/api/history/${project.id}`, {
+              if (lastGeneratedCode && currentProject && currentActivePage) {
+                fetch(`/api/history/${currentProject.id}`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
-                    pageId: activePage.id,
+                    pageId: currentActivePage.id,
                     content: lastGeneratedCode,
                     description: `AI: ${content.slice(0, 60)}${content.length > 60 ? '…' : ''}`,
                   }),
@@ -221,13 +234,13 @@ export default function ChatPanel() {
         fetch('/api/ai/complete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ creditCost, description: `AI generation for project ${project.id}` }),
+          body: JSON.stringify({ creditCost, description: `AI generation for project ${currentProject.id}` }),
         }).catch(() => {})
         setCredits(Math.max(0, credits - creditCost))
       }
 
       const updatedMessages = [...messages, newUserMsg]
-      fetch(`/api/chat-sessions/${project.id}`, {
+      fetch(`/api/chat-sessions/${currentProject.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: updatedMessages }),
