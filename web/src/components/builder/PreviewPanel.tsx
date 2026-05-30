@@ -270,6 +270,21 @@ const QUICK_SECTIONS = [
   },
 ]
 
+// ── Image URL helpers ─────────────────────────────────────────────────────────
+
+/**
+ * Replace relative /uploads/ paths with absolute URLs so Sandpack's iframe
+ * (which can be on a different origin) can load them.
+ */
+function absolutifyImageUrls(code: string): string {
+  if (typeof window === 'undefined') return code
+  const origin = window.location.origin
+  // Match src="/uploads/..." and url('/uploads/...') — double or single quotes
+  return code
+    .replace(/(src=["'])\/uploads\//g, `$1${origin}/uploads/`)
+    .replace(/(url\(["']?)\/uploads\//g, `$1${origin}/uploads/`)
+}
+
 // ── Tag-aware text extraction (for Edit panel) ────────────────────────────────
 
 interface TextEntry { tag: string; label: string; text: string }
@@ -406,12 +421,17 @@ export default function PreviewPanel() {
   const [fullscreen, setFullscreen] = useState(false)
   const [containerHeight, setContainerHeight] = useState(0)
   const [showEditPanel, setShowEditPanel] = useState(false)
-  const [editTab, setEditTab] = useState<'text' | 'links' | 'styles'>('text')
+  const [editTab, setEditTab] = useState<'text' | 'links' | 'images' | 'styles'>('text')
   const [sectionBidMap, setSectionBidMap] = useState<SectionEntry[]>([])
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+  const [uploadedImages, setUploadedImages] = useState<Array<{ url: string; filename: string }>>([])
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
   const code = isValidCode(previewCode) ? previewCode : STARTER_CODE
+  // Code sent to Sandpack — /uploads/ paths are made absolute so the iframe can load them
+  const sandpackCode = useMemo(() => absolutifyImageUrls(code), [code])
   const textEntries = useMemo(() => extractTaggedTexts(code), [code])
   const linkEntries = useMemo(() => extractLinks(code), [code])
 
@@ -524,12 +544,12 @@ export default function PreviewPanel() {
 
   // ── Sandpack files (inject bridge when visual mode is on) ─────────────────
   const sandpackFiles = useMemo(() => ({
-    '/App.js': code,
+    '/App.js': sandpackCode,
     ...(visualEditMode ? {
       '/builder-bridge.js': BUILDER_BRIDGE_JS,
       '/index.js': BUILDER_INDEX_JS,
     } : {}),
-  }), [code, visualEditMode])
+  }), [sandpackCode, visualEditMode])
 
   // ── Edit panel handlers ───────────────────────────────────────────────────
   const applyTextEdit = useCallback((oldText: string, newText: string) => {
@@ -548,9 +568,57 @@ export default function PreviewPanel() {
     window.dispatchEvent(new CustomEvent('quick-edit', { detail: { prompt } }))
   }, [])
 
+  // ── Image management ──────────────────────────────────────────────────────
+  const fetchImages = useCallback(async () => {
+    if (!project) return
+    try {
+      const res = await fetch(`/api/upload/${project.id}`)
+      if (res.ok) {
+        const data = await res.json()
+        setUploadedImages(data.images ?? [])
+      }
+    } catch { /* ignore */ }
+  }, [project])
+
+  // Load images when Images tab is opened
+  useEffect(() => {
+    if (showEditPanel && editTab === 'images') {
+      fetchImages()
+    }
+  }, [showEditPanel, editTab, fetchImages])
+
+  const handleImageUpload = useCallback(async (files: FileList | null) => {
+    if (!files || !project) return
+    setUploading(true)
+    for (const file of Array.from(files)) {
+      const fd = new FormData()
+      fd.append('file', file)
+      try {
+        const res = await fetch(`/api/upload/${project.id}`, { method: 'POST', body: fd })
+        if (res.ok) {
+          const data = await res.json()
+          setUploadedImages(prev => [{ url: data.url, filename: data.filename }, ...prev])
+        }
+      } catch { /* ignore */ }
+    }
+    setUploading(false)
+  }, [project])
+
+  /** Insert an uploaded image into the page code as an <img> tag */
+  const insertImage = useCallback((imgUrl: string) => {
+    const imgTag = `<img src="${imgUrl}" alt="Uploaded image" className="max-w-full h-auto rounded-lg" />`
+    // Insert before the closing </div> of the root div — simple append strategy
+    const closingDiv = code.lastIndexOf('</div>')
+    if (closingDiv >= 0) {
+      const updated = code.slice(0, closingDiv) + '\n      ' + imgTag + '\n    ' + code.slice(closingDiv)
+      saveCode(updated)
+    }
+  }, [code, saveCode])
+
   const EDIT_TABS = [
     { key: 'text', label: '✏️ Text' },
     { key: 'links', label: '🔗 Links' },
+    { key: 'images', label: '🖼 Images' },
     { key: 'styles', label: '🎨 Styles' },
   ] as const
 
@@ -637,7 +705,7 @@ export default function PreviewPanel() {
             options={{ externalResources: ['https://cdn.tailwindcss.com'] }}
           >
             {/* Keeps /App.js in sync with previewCode without remounting */}
-            <SandpackFileSync code={code} />
+            <SandpackFileSync code={sandpackCode} />
             <SandpackLayout style={{ height: sandpackHeight, borderRadius: 0 }}>
               {activePreviewTab === 'preview'
                 ? <SandpackPreview style={{ height: sandpackHeight }} showOpenInCodeSandbox={false} showNavigator={false} />
@@ -722,6 +790,76 @@ export default function PreviewPanel() {
                     }
                   </div>
                 )}
+                {editTab === 'images' && (
+                  <div className="p-3 space-y-3">
+                    {/* Hidden file input */}
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={e => handleImageUpload(e.target.files)}
+                    />
+                    {/* Upload button */}
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploading}
+                      className="w-full flex flex-col items-center justify-center gap-2 py-5 border-2 border-dashed border-border rounded-xl text-muted-foreground hover:border-primary/50 hover:text-foreground hover:bg-secondary/30 transition-colors disabled:opacity-50"
+                    >
+                      {uploading ? (
+                        <>
+                          <span className="text-xl animate-spin">↻</span>
+                          <span className="text-xs">Uploading…</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-2xl">📁</span>
+                          <span className="text-xs font-medium">Upload images</span>
+                          <span className="text-[10px] text-muted-foreground/60">JPG, PNG, WebP, GIF, SVG — max 10 MB</span>
+                        </>
+                      )}
+                    </button>
+
+                    {/* Uploaded image grid */}
+                    {uploadedImages.length === 0 ? (
+                      <p className="text-xs text-muted-foreground text-center py-4">No images uploaded yet.</p>
+                    ) : (
+                      <>
+                        <p className="text-[10px] text-muted-foreground">Click an image to insert it into the page, or copy the URL.</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {uploadedImages.map(img => (
+                            <div key={img.url} className="group relative">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={img.url}
+                                alt={img.filename}
+                                className="w-full aspect-square object-cover rounded-lg border border-border group-hover:border-primary/50 transition-colors"
+                              />
+                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/50 rounded-lg transition-colors flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100">
+                                <button
+                                  onClick={() => insertImage(img.url)}
+                                  className="px-2 py-1 bg-primary text-white rounded text-[10px] font-medium hover:bg-primary/80 transition-colors"
+                                  title="Insert into page"
+                                >
+                                  Insert
+                                </button>
+                                <button
+                                  onClick={() => navigator.clipboard.writeText(img.url)}
+                                  className="px-2 py-1 bg-secondary text-foreground rounded text-[10px] font-medium hover:bg-secondary/80 transition-colors"
+                                  title="Copy URL"
+                                >
+                                  Copy
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+
                 {editTab === 'styles' && (
                   <div className="py-2">
                     <p className="px-4 py-2 text-xs text-muted-foreground">AI applies the change instantly.</p>

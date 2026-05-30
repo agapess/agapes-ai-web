@@ -5,6 +5,8 @@ import { db } from '@/lib/db'
 import { projects, pages } from '@/lib/schema'
 import { and, eq } from 'drizzle-orm'
 import JSZip from 'jszip'
+import { readdir, readFile } from 'fs/promises'
+import { join } from 'path'
 
 export async function GET(_req: NextRequest, { params }: { params: { projectId: string } }) {
   const session = await getServerSession(authOptions)
@@ -22,7 +24,7 @@ export async function GET(_req: NextRequest, { params }: { params: { projectId: 
     .sort((a, b) => a.order - b.order)
 
   const homePage = projectPages.find(p => p.isHomePage) ?? projectPages[0]
-  const mainCode = typeof homePage?.content === 'string' && homePage.content
+  const rawMainCode = typeof homePage?.content === 'string' && homePage.content
     ? homePage.content
     : `export default function App() {
   return (
@@ -33,6 +35,42 @@ export async function GET(_req: NextRequest, { params }: { params: { projectId: 
 }`
 
   const zip = new JSZip()
+
+  // ── Collect uploaded images for this project ──────────────────────────────
+  // Images are stored in public/uploads/<projectId>/ on disk.
+  // In the exported ZIP they go into public/uploads/<projectId>/ so relative
+  // src="/uploads/..." paths in JSX still work from the Vite dev server.
+  const uploadDir = join(process.cwd(), 'public', 'uploads', params.projectId)
+  let imageFiles: string[] = []
+  try {
+    imageFiles = (await readdir(uploadDir)).filter(f =>
+      /\.(jpg|jpeg|png|gif|webp|svg|avif)$/i.test(f),
+    )
+  } catch {
+    // No uploads directory yet — that's fine
+  }
+
+  const publicFolder = zip.folder('public')!
+  if (imageFiles.length > 0) {
+    const uploadsFolder = publicFolder.folder(`uploads/${params.projectId}`)!
+    for (const filename of imageFiles) {
+      try {
+        const bytes = await readFile(join(uploadDir, filename))
+        uploadsFolder.file(filename, bytes)
+      } catch { /* skip unreadable files */ }
+    }
+  }
+
+  // ── Rewrite absolute image URLs in JSX back to relative /uploads/ paths ─
+  // The builder preview uses absolute URLs (window.location.origin + path) so
+  // Sandpack can load them cross-origin. The exported project uses Vite which
+  // serves from localhost, so relative paths work fine there.
+  function normaliseCode(code: string): string {
+    // Replace https?://...host.../uploads/ back to /uploads/
+    return code.replace(/https?:\/\/[^/]+\/uploads\//g, '/uploads/')
+  }
+
+  const mainCode = normaliseCode(rawMainCode)
 
   zip.file('package.json', JSON.stringify({
     name: project.slug,
@@ -63,7 +101,13 @@ export async function GET(_req: NextRequest, { params }: { params: { projectId: 
   </body>
 </html>`)
 
-  zip.file('vite.config.js', `import { defineConfig } from 'vite'\nimport react from '@vitejs/plugin-react'\nexport default defineConfig({ plugins: [react()] })`)
+  zip.file('vite.config.js', `import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+export default defineConfig({
+  plugins: [react()],
+  // Serve public/uploads alongside the app
+  publicDir: 'public',
+})`)
   zip.file('tailwind.config.js', `export default { content: ['./index.html', './src/**/*.{js,jsx}'], theme: { extend: {} }, plugins: [] }`)
   zip.file('postcss.config.js', `export default { plugins: { tailwindcss: {}, autoprefixer: {} } }`)
 
@@ -74,14 +118,46 @@ export async function GET(_req: NextRequest, { params }: { params: { projectId: 
 
   const otherPages = projectPages.filter(p => !p.isHomePage)
   for (const page of otherPages) {
-    const code = typeof page.content === 'string' && page.content ? page.content : null
-    if (code) {
+    const rawCode = typeof page.content === 'string' && page.content ? page.content : null
+    if (rawCode) {
       const componentName = page.name.replace(/[^a-zA-Z0-9]/g, '') || 'Page'
-      src.file(`${componentName}.jsx`, code.replace(/export default function App\(\)/, `export default function ${componentName}()`))
+      src.file(
+        `${componentName}.jsx`,
+        normaliseCode(rawCode).replace(
+          /export default function App\(\)/,
+          `export default function ${componentName}()`,
+        ),
+      )
     }
   }
 
-  zip.file('README.md', `# ${project.name}\n\nGenerated with AI Website Builder.\n\n## Getting Started\n\n\`\`\`bash\nnpm install\nnpm run dev\n\`\`\`\n\nDeploy the \`dist/\` folder to Vercel, Netlify, or any static host.\n`)
+  const imageNote = imageFiles.length > 0
+    ? `\n## Images\n\nYour uploaded images are included in \`public/uploads/${params.projectId}/\`.\nThey are referenced with relative paths (e.g. \`src="/uploads/${params.projectId}/photo.jpg"\`) and will work automatically.\n`
+    : ''
+
+  zip.file('README.md', `# ${project.name}
+
+Generated with **Agapes AI Website Builder**.
+${imageNote}
+## Getting Started
+
+\`\`\`bash
+npm install
+npm run dev
+\`\`\`
+
+Open [http://localhost:5173](http://localhost:5173) in your browser.
+
+## Deploy
+
+Build a production bundle and deploy the \`dist/\` folder to any static host:
+
+\`\`\`bash
+npm run build
+\`\`\`
+
+Hosts: [Vercel](https://vercel.com), [Netlify](https://netlify.com), [Cloudflare Pages](https://pages.cloudflare.com)
+`)
 
   const content = await zip.generateAsync({ type: 'nodebuffer' })
 

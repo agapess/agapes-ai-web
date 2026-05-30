@@ -45,8 +45,13 @@ export function resolveProvider(userId: string, userPlan: string, preferredProvi
     .all()
 
   const eligible = platformConfigs.filter(c => {
-    const plans = JSON.parse(c.allowedPlans as string) as string[]
-    return plans.includes(userPlan)
+    try {
+      const raw = c.allowedPlans
+      const plans = Array.isArray(raw) ? raw : JSON.parse(raw as string)
+      return (plans as string[]).includes(userPlan)
+    } catch {
+      return true // default to allowing all plans if parse fails
+    }
   })
 
   const platformDefault = eligible.find(c => preferredProvider ? c.provider === preferredProvider : c.isDefault)

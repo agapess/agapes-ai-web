@@ -3,6 +3,127 @@ import { useCallback, useState, useRef, useEffect } from 'react'
 import { useBuilderStore } from '@/store/builderStore'
 import { swapTailwindClass, replaceText } from '@/lib/tailwindMutator'
 
+// ── Image picker sub-component ────────────────────────────────────────────────
+function ImagePicker({
+  code,
+  tagName,
+  className,
+  onSave,
+  projectId,
+}: {
+  code: string
+  tagName: string
+  className: string
+  onSave: (updated: string) => void
+  projectId: string
+}) {
+  const [images, setImages] = useState<Array<{ url: string; filename: string }>>([])
+  const [uploading, setUploading] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    setLoading(true)
+    fetch(`/api/upload/${projectId}`)
+      .then(r => r.json())
+      .then(d => setImages(d.images ?? []))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [projectId])
+
+  async function upload(files: FileList | null) {
+    if (!files) return
+    setUploading(true)
+    for (const file of Array.from(files)) {
+      const fd = new FormData()
+      fd.append('file', file)
+      try {
+        const res = await fetch(`/api/upload/${projectId}`, { method: 'POST', body: fd })
+        if (res.ok) {
+          const data = await res.json()
+          setImages(prev => [{ url: data.url, filename: data.filename }, ...prev])
+        }
+      } catch { /* ignore */ }
+    }
+    setUploading(false)
+  }
+
+  /** Replace the src attribute on the selected <img> tag */
+  function applySrc(newSrc: string) {
+    // Find the <img> by className
+    const needle1 = `className="${className}"`
+    const needle2 = `className='${className}'`
+    let tagStart = -1
+    for (const needle of [needle1, needle2]) {
+      let pos = code.indexOf(needle)
+      while (pos >= 0) {
+        let ts = pos
+        while (ts > 0 && code[ts] !== '<') ts--
+        const after = code.slice(ts + 1)
+        if (after.startsWith(tagName) && /[\s>/]/.test(after[tagName.length])) {
+          tagStart = ts; break
+        }
+        pos = code.indexOf(needle, pos + 1)
+      }
+      if (tagStart >= 0) break
+    }
+    if (tagStart < 0) return
+
+    // Find end of this self-closing tag
+    let i = tagStart + 1
+    let braceDepth = 0
+    while (i < code.length) {
+      const ch = code[i]
+      if (ch === '{') braceDepth++
+      else if (ch === '}') braceDepth--
+      else if (ch === '>' && braceDepth === 0) { i++; break }
+      i++
+    }
+    const openTag = code.slice(tagStart, i)
+    let newOpenTag: string
+    if (/\bsrc=["'][^"']*["']/.test(openTag)) {
+      newOpenTag = openTag.replace(/\bsrc=["'][^"']*["']/, `src="${newSrc}"`)
+    } else {
+      newOpenTag = openTag.replace(/^<img/, `<img src="${newSrc}"`)
+    }
+    onSave(code.slice(0, tagStart) + newOpenTag + code.slice(i))
+  }
+
+  return (
+    <div className="rounded-lg border border-purple-500/40 bg-purple-500/5 p-2.5 space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
+          <span className="text-purple-400">🖼</span>
+          <span className="text-[10px] font-semibold text-purple-300 uppercase tracking-wide">Image Source</span>
+        </div>
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
+          className="text-[10px] px-2 py-0.5 bg-purple-600 hover:bg-purple-500 text-white rounded transition-colors disabled:opacity-50"
+        >
+          {uploading ? '↻ Uploading…' : '+ Upload'}
+        </button>
+      </div>
+      <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={e => upload(e.target.files)} />
+      {loading ? (
+        <p className="text-[10px] text-muted-foreground text-center py-2">Loading…</p>
+      ) : images.length === 0 ? (
+        <p className="text-[10px] text-muted-foreground text-center py-2">No images yet. Upload one above.</p>
+      ) : (
+        <div className="grid grid-cols-3 gap-1.5 max-h-48 overflow-y-auto">
+          {images.map(img => (
+            <button key={img.url} onClick={() => applySrc(img.url)} title={img.filename}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={img.url} alt={img.filename} className="w-full aspect-square object-cover rounded border border-border hover:border-purple-400 transition-colors" />
+            </button>
+          ))}
+        </div>
+      )}
+      <p className="text-[10px] text-muted-foreground/60">Click a photo to replace this image.</p>
+    </div>
+  )
+}
+
 // Tags that can meaningfully have a hyperlink set on them
 const LINKABLE_TAGS = ['a', 'button', 'span', 'div', 'li']
 
@@ -359,6 +480,7 @@ export default function VisualEditorPanel() {
 
   const isTextEl = TEXT_TAGS.includes(tagName)
   const isLinkable = LINKABLE_TAGS.includes(tagName)
+  const isImg = tagName === 'img'
 
   return (
     <div className="p-3 space-y-4 text-xs overflow-y-auto">
@@ -377,6 +499,17 @@ export default function VisualEditorPanel() {
           ✕ Deselect
         </button>
       </div>
+
+      {/* Image source picker — shown when an <img> is selected */}
+      {isImg && project && (
+        <ImagePicker
+          code={code}
+          tagName={tagName}
+          className={className}
+          onSave={saveCode}
+          projectId={project.id}
+        />
+      )}
 
       {/* Link / URL editor — shown for a, button, span, div, li */}
       {isLinkable && (

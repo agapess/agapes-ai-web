@@ -8,8 +8,8 @@ import './globals.css'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'AI Website Builder',
-  description: 'Build websites with AI',
+  title: 'Agapes AI Website',
+  description: 'Build complete websites with AI — Agapes AI Website Builder',
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

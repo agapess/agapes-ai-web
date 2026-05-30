@@ -35,7 +35,9 @@ export async function POST(req: NextRequest, { params }: Params) {
     description: template.description ?? null,
   }).run()
 
-  const pagesSnapshot = JSON.parse(template.pagesSnapshot as string) as Array<{
+  const pagesSnapshot = (Array.isArray(template.pagesSnapshot)
+    ? template.pagesSnapshot
+    : JSON.parse(template.pagesSnapshot as string)) as Array<{
     name: string; slug: string; content: string; isHomePage: boolean; order: number
   }>
 
