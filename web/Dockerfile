@@ -3,6 +3,8 @@ RUN npm install -g pnpm
 
 FROM base AS deps
 WORKDIR /app
+# better-sqlite3 needs python3, make, g++ to compile from source
+RUN apk add --no-cache python3 make g++
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY shared/package.json ./shared/
 COPY web/package.json ./web/
