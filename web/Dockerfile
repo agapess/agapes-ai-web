@@ -16,7 +16,9 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/shared/node_modules ./shared/node_modules
 COPY --from=deps /app/web/node_modules ./web/node_modules
 COPY . .
+RUN mkdir -p /data
 RUN pnpm --filter @ai-builder/shared build
+ENV DATABASE_URL=file:/data/db.sqlite
 RUN pnpm --filter web build
 
 FROM base AS runner

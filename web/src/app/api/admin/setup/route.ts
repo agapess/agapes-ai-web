@@ -3,6 +3,8 @@ import { db } from '@/lib/db'
 import { users } from '@/lib/schema'
 import { eq } from 'drizzle-orm'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET() {
   const adminExists = db.select({ id: users.id }).from(users)
     .where(eq(users.role, 'admin'))
