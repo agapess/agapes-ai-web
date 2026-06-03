@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from 'express'
 import { chatRequestSchema } from '@ai-builder/shared'
 import { orchestrate } from '../orchestrator/index.js'
 
-export const chatRouter = Router()
+export const chatRouter: ReturnType<typeof Router> = Router()
 
 chatRouter.post('/stream', async (req: Request, res: Response) => {
   const parsed = chatRequestSchema.safeParse(req.body)

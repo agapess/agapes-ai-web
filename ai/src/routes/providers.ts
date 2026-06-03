@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { buildAdapter, buildDefaultAdapter, type ProviderConfig } from '../adapters/registry.js'
 
-export const providersRouter = Router()
+export const providersRouter: ReturnType<typeof Router> = Router()
 
 providersRouter.get('/health', async (_req, res) => {
   const adapter = buildDefaultAdapter()

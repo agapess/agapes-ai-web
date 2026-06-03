@@ -10,7 +10,7 @@ export interface OrchestratorRequest {
   providerConfig?: ProviderConfig
   projectContext?: string
   customInstructions?: string
-  brandSettings?: { primaryColor?: string; fontFamily?: string; borderRadius?: string; navCode?: string }
+  brandSettings?: { primaryColor?: string; fontFamily?: string; borderRadius?: 'sharp' | 'rounded' | 'pill'; navCode?: string }
 }
 
 function sendEvent(res: Response, data: object) {
