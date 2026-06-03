@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useChatStore, type ChatMessage } from '@/store/chatStore'
 import { useBuilderStore } from '@/store/builderStore'
+import ProviderSelector from './ProviderSelector'
 
 // ── Context-aware hints based on page type ────────────────────────────────────
 function getPageHints(pageName: string): string[] {
@@ -18,9 +19,9 @@ function getPageHints(pageName: string): string[] {
 
 // ── Build phase labels ────────────────────────────────────────────────────────
 const PHASE_LABEL: Record<string, string> = {
-  thinking: '🧠 Planning your website…',
-  building: '⚙️ Building components…',
-  done: '✓ Done',
+  thinking: '🧠 Analyzing your request…',
+  building: '⚙️ Generating code…',
+  done: '✓ Complete',
 }
 
 // ── Single message bubble ─────────────────────────────────────────────────────
@@ -29,8 +30,8 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
 
   if (msg.role === 'user') {
     return (
-      <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-2xl rounded-tr-sm px-3 py-2 text-sm bg-primary text-primary-foreground">
+      <div className="flex justify-end group">
+        <div className="max-w-[85%] rounded-2xl rounded-tr-md px-4 py-2.5 text-sm bg-primary text-primary-foreground shadow-sm">
           {msg.content}
         </div>
       </div>
@@ -38,29 +39,34 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
   }
 
   return (
-    <div className="flex justify-start">
-      <div className="max-w-[90%] space-y-1">
-        {msg.content && (
-          <div className="rounded-2xl rounded-tl-sm px-3 py-2 text-sm bg-secondary text-foreground whitespace-pre-wrap">
-            {msg.content}
+    <div className="flex justify-start group">
+      <div className="max-w-[90%] space-y-1.5">
+        <div className="flex gap-2.5 items-start">
+          <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center shrink-0 mt-0.5">
+            <span className="text-primary text-xs">✦</span>
           </div>
-        )}
-        {msg.generatedCode && (
-          <div>
-            <button
-              onClick={() => setCodeOpen(o => !o)}
-              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-1"
-            >
-              <span className="text-green-400">▣</span>
-              <span>Code generated</span>
-              <span className="ml-0.5">{codeOpen ? '▲' : '▼'}</span>
-            </button>
-            {codeOpen && (
-              <pre className="mt-1 text-xs bg-zinc-900 text-zinc-300 rounded-lg px-3 py-2 overflow-x-auto max-h-48">
-                <code>{msg.generatedCode}</code>
-              </pre>
+          <div className="flex-1 space-y-1.5">
+            {msg.content && (
+              <div className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
+                {msg.content}
+              </div>
+            )}
+            {msg.generatedCode && (
+              <button
+                onClick={() => setCodeOpen(o => !o)}
+                className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors px-2.5 py-1 rounded-md bg-green-500/5 border border-green-500/20 hover:border-green-500/40"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
+                <span>Code generated</span>
+                <span className="ml-1 text-[9px]">{codeOpen ? '▲' : '▼'}</span>
+              </button>
             )}
           </div>
+        </div>
+        {codeOpen && msg.generatedCode && (
+          <pre className="ml-8 text-[11px] bg-zinc-900/80 text-zinc-300 rounded-lg px-3 py-2.5 overflow-x-auto max-h-48 border border-border/50">
+            <code>{msg.generatedCode}</code>
+          </pre>
         )}
       </div>
     </div>
@@ -71,17 +77,19 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
 function BuildingIndicator({ phase }: { phase: string }) {
   return (
     <div className="flex justify-start">
-      <div className="flex items-center gap-2 rounded-2xl rounded-tl-sm px-3 py-2 bg-secondary/60 text-muted-foreground text-sm">
-        <span className="flex gap-1">
-          {[0, 150, 300].map(delay => (
-            <span
-              key={delay}
-              className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce"
-              style={{ animationDelay: `${delay}ms` }}
-            />
-          ))}
-        </span>
-        <span>{PHASE_LABEL[phase] ?? 'Working…'}</span>
+      <div className="flex items-center gap-2.5 ml-8">
+        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-secondary/60 border border-border/50">
+          <span className="flex gap-1">
+            {[0, 150, 300].map(delay => (
+              <span
+                key={delay}
+                className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce"
+                style={{ animationDelay: `${delay}ms` }}
+              />
+            ))}
+          </span>
+          <span className="text-xs text-muted-foreground">{PHASE_LABEL[phase] ?? 'Working…'}</span>
+        </div>
       </div>
     </div>
   )
@@ -92,7 +100,6 @@ export default function ChatPanel() {
   const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
-  // Ref always points to the latest sendMessageText — prevents stale closure in event handlers
   const sendMessageTextRef = useRef<(override?: string) => Promise<void>>(async () => {})
   const {
     messages,
@@ -105,7 +112,7 @@ export default function ChatPanel() {
     finalizeStreamingMessage,
     setBuildPhase,
   } = useChatStore()
-  const { project, setPreviewCode, credits, setCredits, activePage, updatePageContent, customInstructions, setActivePreviewTab } = useBuilderStore()
+  const { project, setPreviewCode, credits, setCredits, activePage, updatePageContent, customInstructions, setActivePreviewTab, selectedProviderId, providers } = useBuilderStore()
 
   function stopStream() {
     abortRef.current?.abort()
@@ -118,17 +125,15 @@ export default function ChatPanel() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, streamingContent, buildPhase])
 
-  // Keep the ref in sync with the latest sendMessageText on every render
   useEffect(() => {
     sendMessageTextRef.current = sendMessageText
   })
 
-  // Listen for quick-edit events — uses ref so it never captures a stale closure
+  // Listen for quick-edit events
   useEffect(() => {
     function handler(e: Event) {
       const { prompt } = (e as CustomEvent<{ prompt: string }>).detail
       if (!prompt) return
-      // Read streaming from store directly to avoid stale closure
       const isStreaming = useChatStore.getState().streaming
       if (isStreaming) return
       addMessage({ role: 'user' as const, content: prompt, timestamp: Date.now() })
@@ -136,30 +141,27 @@ export default function ChatPanel() {
     }
     window.addEventListener('quick-edit', handler)
     return () => window.removeEventListener('quick-edit', handler)
-  // Register once — the ref always has the latest function
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  /** Core send function — accepts an explicit prompt or falls back to the textarea value */
+  /** Core send function */
   async function sendMessageText(overrideContent?: string) {
     const content = (overrideContent ?? input).trim()
-    // Always read latest project/streaming from store so this never has a stale closure
-    const { project: currentProject, customInstructions: currentInstructions, activePage: currentActivePage } = useBuilderStore.getState()
+    const { project: currentProject, customInstructions: currentInstructions, activePage: currentActivePage, selectedProviderId: currentProviderId, providers: currentProviders } = useBuilderStore.getState()
     const { streaming: currentStreaming } = useChatStore.getState()
     if (!content || currentStreaming || !currentProject) return
 
     if (!overrideContent) setInput('')
     const newUserMsg = { role: 'user' as const, content, timestamp: Date.now() }
-    if (!overrideContent) addMessage(newUserMsg) // quick-edit already added the message
+    if (!overrideContent) addMessage(newUserMsg)
     setStreaming(true)
     setBuildPhase('thinking')
 
     const abort = new AbortController()
     abortRef.current = abort
 
-    // Send the current live code from the store — always the right page,
-    // always includes visual edits made outside the AI chat
     const currentCode = useBuilderStore.getState().previewCode || ''
+    const selectedProvider = currentProviders.find(p => p.id === currentProviderId)
 
     try {
       const res = await fetch('/api/ai/stream', {
@@ -170,6 +172,7 @@ export default function ChatPanel() {
           message: content,
           customInstructions: currentInstructions || undefined,
           currentCode: currentCode || undefined,
+          provider: selectedProvider?.provider || undefined,
         }),
         signal: abort.signal,
       })
@@ -200,14 +203,13 @@ export default function ChatPanel() {
           try {
             const event = JSON.parse(line.slice(6))
             if (event.type === 'text_delta') {
-              // Switch to "building" once we see code starting to arrive
               if (buildPhase === 'thinking') setBuildPhase('building')
               appendStreamingContent(event.content)
             } else if (event.type === 'preview_update') {
               lastGeneratedCode = event.code
               setBuildPhase('building')
               setPreviewCode(event.code)
-              setActivePreviewTab('preview') // auto-switch to preview tab
+              setActivePreviewTab('preview')
               if (currentActivePage && currentProject) {
                 updatePageContent(currentActivePage.id, event.code)
                 fetch(`/api/pages/${currentProject.id}/${currentActivePage.id}`, {
@@ -219,7 +221,6 @@ export default function ChatPanel() {
             } else if (event.type === 'done') {
               success = true
               finalizeStreamingMessage(lastGeneratedCode)
-              // Save to version history
               if (lastGeneratedCode && currentProject && currentActivePage) {
                 fetch(`/api/history/${currentProject.id}`, {
                   method: 'POST',
@@ -256,7 +257,6 @@ export default function ChatPanel() {
       }).catch(() => {})
 
     } catch (err: unknown) {
-      // AbortError means the user clicked Stop — finalize silently without an error message
       if (err instanceof Error && err.name === 'AbortError') {
         finalizeStreamingMessage()
       } else {
@@ -271,37 +271,53 @@ export default function ChatPanel() {
     sendMessageText()
   }
 
-  // While streaming: show the non-code portion of accumulated text live
+  // Live non-code text while streaming
   const liveText = streamingContent
     ? streamingContent
         .replace(/```(?:jsx?|tsx?|javascript|typescript)[\s\S]*?```/g, '')
-        .replace(/```(?:jsx?|tsx?|javascript|typescript)[^\n]*\n[\s\S]*/g, '') // partial open block
+        .replace(/```(?:jsx?|tsx?|javascript|typescript)[^\n]*\n[\s\S]*/g, '')
         .trim()
     : ''
 
   return (
     <aside className="w-80 flex flex-col border-r border-border bg-card shrink-0">
-      <div className="px-4 py-3 border-b border-border">
+      {/* Header */}
+      <div className="px-4 py-3 border-b border-border flex items-center justify-between">
         <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-          <span className="text-primary">✦</span> AI Chat
+          <span className="w-5 h-5 rounded-md bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center">
+            <span className="text-white text-[10px]">✦</span>
+          </span>
+          AI Assistant
         </h2>
+        {activePage && (
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border">
+            {activePage.name}
+          </span>
+        )}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      {/* Messages area */}
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
         {messages.length === 0 && !streaming && (
-          <div className="mt-8 space-y-3 text-center">
-            <p className="text-muted-foreground text-sm">
-              {activePage
-                ? `Working on "${activePage.name}" — what would you like to add or change?`
-                : 'Describe the website you want to build, and I\'ll plan it out and generate it for you.'}
-            </p>
-            <div className="flex flex-col gap-2">
+          <div className="mt-6 space-y-4">
+            <div className="text-center space-y-2">
+              <div className="w-10 h-10 mx-auto rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center border border-primary/10">
+                <span className="text-primary text-lg">✦</span>
+              </div>
+              <p className="text-muted-foreground text-sm leading-relaxed">
+                {activePage
+                  ? `Working on "${activePage.name}" — describe what to change or add.`
+                  : 'Describe the website you want to build.'}
+              </p>
+            </div>
+            <div className="flex flex-col gap-1.5 pt-2">
               {getPageHints(activePage?.name ?? '').map(hint => (
                 <button
                   key={hint}
                   onClick={() => setInput(hint)}
-                  className="text-xs text-left px-3 py-2 rounded-lg border border-border hover:border-primary/50 hover:bg-secondary/50 transition-colors text-muted-foreground hover:text-foreground"
+                  className="text-xs text-left px-3 py-2.5 rounded-xl border border-border/80 hover:border-primary/40 hover:bg-primary/5 transition-all text-muted-foreground hover:text-foreground group"
                 >
+                  <span className="opacity-50 group-hover:opacity-100 transition-opacity mr-1.5">→</span>
                   {hint}
                 </button>
               ))}
@@ -313,12 +329,17 @@ export default function ChatPanel() {
           <MessageBubble key={i} msg={msg} />
         ))}
 
-        {/* Live non-code text while streaming */}
+        {/* Live streaming text */}
         {streaming && liveText && (
           <div className="flex justify-start">
-            <div className="max-w-[90%] rounded-2xl rounded-tl-sm px-3 py-2 text-sm bg-secondary text-foreground whitespace-pre-wrap">
-              {liveText}
-              <span className="inline-block w-1 h-4 bg-primary ml-0.5 animate-pulse" />
+            <div className="flex gap-2.5 items-start max-w-[90%]">
+              <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center shrink-0 mt-0.5">
+                <span className="text-primary text-xs">✦</span>
+              </div>
+              <div className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
+                {liveText}
+                <span className="inline-block w-0.5 h-4 bg-primary ml-0.5 animate-pulse rounded-full" />
+              </div>
             </div>
           </div>
         )}
@@ -331,8 +352,9 @@ export default function ChatPanel() {
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Input area — card style */}
       <div className="p-3 border-t border-border">
-        <div className="flex gap-2">
+        <div className="bg-secondary/50 border border-border rounded-xl p-2.5 focus-within:border-primary/50 focus-within:bg-secondary/80 transition-all">
           <textarea
             value={input}
             onChange={e => setInput(e.target.value)}
@@ -342,28 +364,39 @@ export default function ChatPanel() {
                 sendMessage()
               }
             }}
-            placeholder="Describe what to build…"
-            rows={2}
+            placeholder={activePage ? `Describe changes to ${activePage.name}…` : 'Describe what to build…'}
+            rows={3}
             disabled={streaming}
-            className="flex-1 px-3 py-2 bg-secondary border border-border rounded-md text-foreground placeholder-muted-foreground text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+            className="w-full bg-transparent text-foreground placeholder-muted-foreground text-sm resize-none focus:outline-none disabled:opacity-50 leading-relaxed"
           />
-          {streaming ? (
-            <button
-              onClick={stopStream}
-              title="Stop generation"
-              className="px-3 py-2 bg-red-600 hover:bg-red-500 text-white rounded-md text-sm font-medium transition-colors self-end flex items-center gap-1"
-            >
-              <span className="w-2.5 h-2.5 bg-white rounded-sm inline-block" />
-            </button>
-          ) : (
-            <button
-              onClick={sendMessage}
-              disabled={!input.trim()}
-              className="px-3 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity self-end"
-            >
-              ↑
-            </button>
-          )}
+          {/* Footer: provider selector + send button */}
+          <div className="flex items-center justify-between pt-1.5 border-t border-border/50 mt-1">
+            <ProviderSelector />
+            <div className="flex items-center gap-1.5">
+              {streaming ? (
+                <button
+                  onClick={stopStream}
+                  title="Stop generation"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-red-600/90 hover:bg-red-500 text-white rounded-lg text-[11px] font-medium transition-colors"
+                >
+                  <span className="w-2 h-2 bg-white rounded-sm" />
+                  <span>Stop</span>
+                </button>
+              ) : (
+                <button
+                  onClick={sendMessage}
+                  disabled={!input.trim()}
+                  title="Send (Enter)"
+                  className="flex items-center justify-center w-7 h-7 bg-primary text-primary-foreground rounded-lg hover:opacity-90 disabled:opacity-30 transition-all disabled:cursor-not-allowed"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="19" x2="12" y2="5" />
+                    <polyline points="5 12 12 5 19 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </aside>

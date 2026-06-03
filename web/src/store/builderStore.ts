@@ -33,6 +33,14 @@ interface Project {
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
+export interface ProviderOption {
+  id: string
+  provider: string
+  displayName: string
+  model: string | null
+  isDefault: boolean
+}
+
 interface BuilderState {
   project: Project | null
   pages: BuilderPage[]
@@ -53,6 +61,10 @@ interface BuilderState {
   saveStatus: SaveStatus
   /** Shared nav component JSX (empty string = none) */
   navCode: string
+  /** Available AI provider configs (loaded once) */
+  providers: ProviderOption[]
+  /** Currently selected provider ID (empty = auto) */
+  selectedProviderId: string
 
   setProject: (project: Project) => void
   setPages: (pages: BuilderPage[]) => void
@@ -69,6 +81,8 @@ interface BuilderState {
   setSelectedElement: (el: SelectedElement | null) => void
   setSaveStatus: (status: SaveStatus) => void
   setNavCode: (code: string) => void
+  setProviders: (providers: ProviderOption[]) => void
+  setSelectedProviderId: (id: string) => void
 }
 
 export const useBuilderStore = create<BuilderState>((set, get) => ({
@@ -86,6 +100,8 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   selectedElement: null,
   saveStatus: 'idle',
   navCode: '',
+  providers: [],
+  selectedProviderId: '',
 
   setProject: (project) => set({ project }),
   setPages: (pages) => {
@@ -118,4 +134,6 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   setSelectedElement: (selectedElement) => set({ selectedElement }),
   setSaveStatus: (saveStatus) => set({ saveStatus }),
   setNavCode: (navCode) => set({ navCode }),
+  setProviders: (providers) => set({ providers }),
+  setSelectedProviderId: (selectedProviderId) => set({ selectedProviderId }),
 }))
