@@ -520,7 +520,8 @@ export default function PreviewPanel() {
 
   // ── Persist code changes ──────────────────────────────────────────────────
   const saveCode = useCallback(async (updated: string) => {
-    setPreviewCode(updated)
+    // Push to undo stack before changing
+    useBuilderStore.getState().pushCodeWithUndo(updated)
     setSaveStatus('saving')
     if (activePage && project) {
       updatePageContent(activePage.id, updated)
@@ -538,7 +539,7 @@ export default function PreviewPanel() {
     } else {
       setSaveStatus('idle')
     }
-  }, [setPreviewCode, activePage, project, updatePageContent, setSaveStatus])
+  }, [activePage, project, updatePageContent, setSaveStatus])
 
   // ── Send command to Sandpack iframe ───────────────────────────────────────
   const sendToIframe = useCallback((msg: object) => {
@@ -619,10 +620,36 @@ export default function PreviewPanel() {
         }
         if (fullscreen) setFullscreen(false)
       }
+      // Undo: Ctrl+Z (or Cmd+Z on Mac)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        const prev = useBuilderStore.getState().undo()
+        if (prev && activePage && project) {
+          updatePageContent(activePage.id, prev)
+          fetch(`/api/pages/${project.id}/${activePage.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: prev }),
+          }).catch(() => {})
+        }
+      }
+      // Redo: Ctrl+Shift+Z (or Cmd+Shift+Z)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && e.shiftKey) {
+        e.preventDefault()
+        const next = useBuilderStore.getState().redo()
+        if (next && activePage && project) {
+          updatePageContent(activePage.id, next)
+          fetch(`/api/pages/${project.id}/${activePage.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: next }),
+          }).catch(() => {})
+        }
+      }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [fullscreen, showEditPanel, visualEditMode, setSelectedElement, sendToIframe])
+  }, [fullscreen, showEditPanel, visualEditMode, setSelectedElement, sendToIframe, activePage, project, updatePageContent])
 
   // ── Measure container height for Sandpack ─────────────────────────────────
   useEffect(() => {

@@ -24,15 +24,49 @@ const PHASE_LABEL: Record<string, string> = {
   done: '✓ Complete',
 }
 
+// ── Follow-up suggestions after AI response ──────────────────────────────────
+function getFollowUpSuggestions(pageName: string, lastUserMsg: string): string[] {
+  const n = pageName.toLowerCase()
+  const base = [
+    'Make it more visually striking',
+    'Improve mobile responsiveness',
+    'Add smooth animations',
+  ]
+  if (n.includes('home')) return ['Add a testimonials section', 'Improve the CTA buttons', 'Add a features grid', ...base].slice(0, 3)
+  if (n.includes('contact')) return ['Add a map embed', 'Simplify the form', 'Add social links', ...base].slice(0, 3)
+  if (n.includes('about')) return ['Add team photos', 'Add a timeline', 'Make it more personal', ...base].slice(0, 3)
+  if (n.includes('pric')) return ['Add a toggle (monthly/annual)', 'Highlight the popular plan', 'Add FAQ section', ...base].slice(0, 3)
+  return base
+}
+
 // ── Single message bubble ─────────────────────────────────────────────────────
-function MessageBubble({ msg }: { msg: ChatMessage }) {
+function MessageBubble({ msg, isLast, isLastUser, onRegenerate, onEditMessage }: {
+  msg: ChatMessage
+  isLast: boolean
+  isLastUser: boolean
+  onRegenerate?: () => void
+  onEditMessage?: (content: string) => void
+}) {
   const [codeOpen, setCodeOpen] = useState(false)
 
   if (msg.role === 'user') {
     return (
       <div className="flex justify-end group">
-        <div className="max-w-[85%] rounded-2xl rounded-tr-md px-4 py-2.5 text-sm bg-primary text-primary-foreground shadow-sm">
+        <div className="relative max-w-[85%] rounded-2xl rounded-tr-md px-4 py-2.5 text-sm bg-primary text-primary-foreground shadow-sm">
           {msg.content}
+          {/* Edit button on last user message */}
+          {isLastUser && onEditMessage && (
+            <button
+              onClick={() => onEditMessage(msg.content)}
+              className="absolute -left-7 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
+              title="Edit message"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
     )
@@ -59,6 +93,20 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
                 <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
                 <span>Code generated</span>
                 <span className="ml-1 text-[9px]">{codeOpen ? '▲' : '▼'}</span>
+              </button>
+            )}
+            {/* Regenerate button on last assistant message */}
+            {isLast && onRegenerate && (
+              <button
+                onClick={onRegenerate}
+                className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors px-2 py-0.5 rounded-md hover:bg-secondary"
+                title="Regenerate response"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="1 4 1 10 7 10" />
+                  <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                </svg>
+                <span>Retry</span>
               </button>
             )}
           </div>
@@ -279,6 +327,25 @@ export default function ChatPanel() {
         .trim()
     : ''
 
+  // Find last user message index (for edit button)
+  const lastUserIdx = messages.reduce((acc, m, i) => m.role === 'user' ? i : acc, -1)
+  // Find last assistant message index (for regenerate + follow-up chips)
+  const lastAssistantIdx = messages.reduce((acc, m, i) => m.role === 'assistant' ? i : acc, -1)
+
+  function handleRegenerate() {
+    if (streaming) return
+    // Find the last user message and re-send it
+    const lastUser = messages.filter(m => m.role === 'user').pop()
+    if (lastUser) {
+      sendMessageText(lastUser.content)
+    }
+  }
+
+  function handleEditMessage(content: string) {
+    // Put it back in the input for editing
+    setInput(content)
+  }
+
   return (
     <aside className="w-80 flex flex-col border-r border-border bg-card shrink-0">
       {/* Header */}
@@ -326,8 +393,30 @@ export default function ChatPanel() {
         )}
 
         {messages.map((msg, i) => (
-          <MessageBubble key={i} msg={msg} />
+          <MessageBubble
+            key={i}
+            msg={msg}
+            isLast={i === lastAssistantIdx && msg.role === 'assistant'}
+            isLastUser={i === lastUserIdx && msg.role === 'user'}
+            onRegenerate={i === lastAssistantIdx && !streaming ? handleRegenerate : undefined}
+            onEditMessage={i === lastUserIdx && !streaming ? handleEditMessage : undefined}
+          />
         ))}
+
+        {/* Follow-up suggestion chips after last AI response */}
+        {!streaming && messages.length > 0 && lastAssistantIdx === messages.length - 1 && (
+          <div className="ml-8 flex flex-wrap gap-1.5 pt-1">
+            {getFollowUpSuggestions(activePage?.name ?? '', messages[lastUserIdx]?.content ?? '').map(suggestion => (
+              <button
+                key={suggestion}
+                onClick={() => { addMessage({ role: 'user', content: suggestion, timestamp: Date.now() }); sendMessageText(suggestion) }}
+                className="text-[11px] px-2.5 py-1.5 rounded-lg border border-border/80 hover:border-primary/40 hover:bg-primary/5 text-muted-foreground hover:text-foreground transition-all"
+              >
+                {suggestion}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Live streaming text */}
         {streaming && liveText && (

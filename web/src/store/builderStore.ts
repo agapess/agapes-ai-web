@@ -65,6 +65,9 @@ interface BuilderState {
   providers: ProviderOption[]
   /** Currently selected provider ID (empty = auto) */
   selectedProviderId: string
+  /** Undo/redo stacks for preview code */
+  undoStack: string[]
+  redoStack: string[]
 
   setProject: (project: Project) => void
   setPages: (pages: BuilderPage[]) => void
@@ -83,6 +86,10 @@ interface BuilderState {
   setNavCode: (code: string) => void
   setProviders: (providers: ProviderOption[]) => void
   setSelectedProviderId: (id: string) => void
+  /** Push current code to undo stack, then set new code */
+  pushCodeWithUndo: (newCode: string) => void
+  undo: () => string | null
+  redo: () => string | null
 }
 
 export const useBuilderStore = create<BuilderState>((set, get) => ({
@@ -102,6 +109,8 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   navCode: '',
   providers: [],
   selectedProviderId: '',
+  undoStack: [],
+  redoStack: [],
 
   setProject: (project) => set({ project }),
   setPages: (pages) => {
@@ -136,4 +145,36 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   setNavCode: (navCode) => set({ navCode }),
   setProviders: (providers) => set({ providers }),
   setSelectedProviderId: (selectedProviderId) => set({ selectedProviderId }),
+  pushCodeWithUndo: (newCode) => {
+    const { previewCode, undoStack } = get()
+    if (previewCode && previewCode !== newCode) {
+      // Keep max 30 undo levels
+      const stack = [...undoStack, previewCode].slice(-30)
+      set({ previewCode: newCode, undoStack: stack, redoStack: [] })
+    } else {
+      set({ previewCode: newCode })
+    }
+  },
+  undo: () => {
+    const { undoStack, previewCode, redoStack } = get()
+    if (undoStack.length === 0) return null
+    const prev = undoStack[undoStack.length - 1]
+    set({
+      undoStack: undoStack.slice(0, -1),
+      redoStack: [...redoStack, previewCode],
+      previewCode: prev,
+    })
+    return prev
+  },
+  redo: () => {
+    const { redoStack, previewCode, undoStack } = get()
+    if (redoStack.length === 0) return null
+    const next = redoStack[redoStack.length - 1]
+    set({
+      redoStack: redoStack.slice(0, -1),
+      undoStack: [...undoStack, previewCode],
+      previewCode: next,
+    })
+    return next
+  },
 }))
