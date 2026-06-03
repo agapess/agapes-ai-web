@@ -15,12 +15,18 @@ services:
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - NEXT_PUBLIC_AI_SERVICE_URL=${NEXT_PUBLIC_AI_SERVICE_URL:-http://localhost:4001}
+      - AI_SERVICE_INTERNAL_URL=http://ai:4001
       - ENCRYPTION_SECRET=${ENCRYPTION_SECRET}
       - REDIS_URL=redis://redis:6379
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      - NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}
     volumes:
       - web_data:/data
+      - uploads_data:/app/web/public/uploads
     depends_on:
       - redis
+      - ai
     restart: unless-stopped
 
   ai:
@@ -35,15 +41,12 @@ services:
       - LMSTUDIO_BASE_URL=${LMSTUDIO_BASE_URL}
       - DEFAULT_PROVIDER=${DEFAULT_PROVIDER:-ollama}
       - DEFAULT_MODEL=${DEFAULT_MODEL:-llama3.2}
-      - REDIS_URL=redis://redis:6379
     depends_on:
       - redis
     restart: unless-stopped
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "${REDIS_PORT:-6380}:6379"
     volumes:
       - redis_data:/data
     restart: unless-stopped
@@ -51,3 +54,4 @@ services:
 volumes:
   web_data:
   redis_data:
+  uploads_data:
