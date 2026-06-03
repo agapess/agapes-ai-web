@@ -185,7 +185,8 @@ Hosts: [Vercel](https://vercel.com), [Netlify](https://netlify.com), [Cloudflare
 
   const content = await zip.generateAsync({ type: 'nodebuffer' })
 
-  return new NextResponse(content as unknown as Uint8Array, {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return new NextResponse(content as any, {
     headers: {
       'Content-Type': 'application/zip',
       'Content-Disposition': `attachment; filename="${project.slug}-export.zip"`,
