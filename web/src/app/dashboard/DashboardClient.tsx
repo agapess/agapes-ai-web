@@ -6,6 +6,55 @@ import Link from 'next/link'
 import TemplateGallery from './TemplateGallery'
 import ProjectThumbnail from './ProjectThumbnail'
 
+// ── Clone prompt builder ──────────────────────────────────────────────────────
+interface CloneAnalysis {
+  url: string
+  title: string
+  description: string
+  headings: string[]
+  navLinks: string[]
+  sections: Array<{ tag: string; id?: string; className?: string; textPreview: string }>
+  colors: string[]
+  fonts: string[]
+  images: Array<{ src: string; alt: string }>
+  textContent: string
+  rawHtmlSnippet: string
+}
+
+function buildClonePrompt(analysis: CloneAnalysis): string {
+  const parts: string[] = []
+  parts.push(`Clone this website as closely as possible: ${analysis.url}`)
+  parts.push('')
+  parts.push('## Website Analysis')
+  if (analysis.title) parts.push(`**Title:** ${analysis.title}`)
+  if (analysis.description) parts.push(`**Description:** ${analysis.description}`)
+  if (analysis.navLinks.length > 0) parts.push(`**Navigation:** ${analysis.navLinks.join(' | ')}`)
+  if (analysis.headings.length > 0) parts.push(`**Headings:** ${analysis.headings.slice(0, 8).join(' / ')}`)
+  if (analysis.colors.length > 0) parts.push(`**Colors found:** ${analysis.colors.slice(0, 6).join(', ')}`)
+  if (analysis.fonts.length > 0) parts.push(`**Fonts:** ${analysis.fonts.join(', ')}`)
+  if (analysis.images.length > 0) {
+    parts.push(`**Images:** ${analysis.images.map(img => img.alt || img.src.split('/').pop()).join(', ')}`)
+  }
+  parts.push('')
+  parts.push('## Page Structure')
+  for (const sec of analysis.sections.slice(0, 8)) {
+    parts.push(`- <${sec.tag}${sec.id ? ` id="${sec.id}"` : ''}> ${sec.textPreview}`)
+  }
+  parts.push('')
+  parts.push('## Content')
+  parts.push(analysis.textContent.slice(0, 2000))
+  parts.push('')
+  parts.push('## Instructions')
+  parts.push('Recreate this website as a complete, pixel-accurate React + Tailwind component.')
+  parts.push('- Match the exact layout, colors, fonts, spacing, and visual hierarchy.')
+  parts.push('- Use the exact same text content, headings, and navigation links.')
+  parts.push('- For images, use placeholder colored divs or inline SVG icons that match the context.')
+  parts.push('- Make it fully responsive and interactive (hover states, transitions).')
+  parts.push('- Match the color scheme as closely as possible using Tailwind utilities.')
+  parts.push('- If the site has a dark theme, use dark backgrounds. If light, use light backgrounds.')
+  return parts.join('\n')
+}
+
 interface Project {
   id: string
   name: string
@@ -65,6 +114,120 @@ export default function DashboardClient({ initialProjects, user }: Props) {
     }
   }
 
+  // ── Clone website flow ──────────────────────────────────────────────────────
+  const [showCloneModal, setShowCloneModal] = useState(false)
+  const [cloneUrl, setCloneUrl] = useState('')
+  const [cloning, setCloning] = useState(false)
+  const [cloneError, setCloneError] = useState('')
+  const [cloneStatus, setCloneStatus] = useState('')
+
+  async function handleClone() {
+    if (!cloneUrl.trim()) return
+    setCloning(true)
+    setCloneError('')
+    setCloneStatus('Fetching website…')
+
+    try {
+      // 1. Analyze the website
+      const analyzeRes = await fetch('/api/clone', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: cloneUrl }),
+      })
+      const analyzeData = await analyzeRes.json()
+      if (!analyzeRes.ok) {
+        setCloneError(analyzeData.error || 'Failed to analyze website')
+        setCloning(false)
+        return
+      }
+
+      setCloneStatus('Creating project…')
+
+      // 2. Create a new project
+      const siteName = analyzeData.analysis.title
+        ? analyzeData.analysis.title.split(/[|–—\-]/)[0].trim().slice(0, 40)
+        : new URL(cloneUrl.startsWith('http') ? cloneUrl : `https://${cloneUrl}`).hostname
+      const createRes = await fetch('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: `${siteName} (Clone)` }),
+      })
+      const createData = await createRes.json()
+      if (!createData.project) {
+        setCloneError('Failed to create project')
+        setCloning(false)
+        return
+      }
+
+      setCloneStatus('AI is rebuilding the website…')
+
+      // 3. Build a detailed prompt from the analysis
+      const analysis = analyzeData.analysis
+      const clonePrompt = buildClonePrompt(analysis)
+
+      // 4. Send to AI to generate the clone
+      const aiRes = await fetch('/api/ai/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: createData.project.id,
+          message: clonePrompt,
+        }),
+      })
+
+      if (!aiRes.ok || !aiRes.body) {
+        setCloneError('AI failed to generate the clone')
+        setCloning(false)
+        return
+      }
+
+      // 5. Read the stream to extract generated code
+      const reader = aiRes.body.getReader()
+      const decoder = new TextDecoder()
+      let generatedCode = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        const lines = decoder.decode(value, { stream: true })
+          .split('\n')
+          .filter(l => l.startsWith('data: '))
+        for (const line of lines) {
+          try {
+            const event = JSON.parse(line.slice(6))
+            if (event.type === 'preview_update') {
+              generatedCode = event.code
+            }
+          } catch { /* skip */ }
+        }
+      }
+
+      if (generatedCode) {
+        // Save the generated code to the home page
+        const pagesRes = await fetch(`/api/pages/${createData.project.id}`)
+        const pagesData = await pagesRes.json()
+        const homePage = pagesData.pages?.find((p: { isHomePage: boolean }) => p.isHomePage) ?? pagesData.pages?.[0]
+        if (homePage) {
+          await fetch(`/api/pages/${createData.project.id}/${homePage.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: generatedCode }),
+          })
+        }
+      }
+
+      // Navigate to the builder
+      setCloning(false)
+      setShowCloneModal(false)
+      setCloneUrl('')
+      router.push(`/builder/${createData.project.id}`)
+
+    } catch (err) {
+      setCloneError(err instanceof Error ? err.message : 'Something went wrong')
+      setCloning(false)
+    }
+  }
+
   // Sort by most recently updated
   const sortedProjects = useMemo(() =>
     [...projects].sort((a, b) => {
@@ -79,6 +242,12 @@ export default function DashboardClient({ initialProjects, user }: Props) {
       <header className="border-b border-border px-6 py-4 flex items-center justify-between">
         <h1 className="text-xl font-bold text-foreground">✦ Agapes AI Website</h1>
         <div className="flex items-center gap-4">
+          <button
+            onClick={() => setShowCloneModal(true)}
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            🌐 Clone Website
+          </button>
           <button
             onClick={() => setShowTemplates(true)}
             className="text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -213,6 +382,69 @@ export default function DashboardClient({ initialProjects, user }: Props) {
         )}
       </main>
       {showTemplates && <TemplateGallery onClose={() => setShowTemplates(false)} />}
+
+      {/* Clone Website Modal */}
+      {showCloneModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+            <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+              <h3 className="font-semibold text-foreground flex items-center gap-2">
+                <span>🌐</span> Clone a Website
+              </h3>
+              <button
+                onClick={() => { setShowCloneModal(false); setCloneError(''); setCloneStatus('') }}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >✕</button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Enter any website URL and AI will analyze its design, layout, and content — then recreate it as a React + Tailwind component.
+              </p>
+              <div>
+                <input
+                  type="url"
+                  value={cloneUrl}
+                  onChange={e => setCloneUrl(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && !cloning && handleClone()}
+                  placeholder="https://example.com"
+                  disabled={cloning}
+                  className="w-full px-4 py-3 bg-secondary border border-border rounded-xl text-foreground placeholder-muted-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+                  autoFocus
+                />
+              </div>
+              {cloneError && (
+                <p className="text-sm text-red-400 bg-red-400/10 px-3 py-2 rounded-lg">{cloneError}</p>
+              )}
+              {cloning && cloneStatus && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span className="flex gap-1">
+                    {[0, 150, 300].map(delay => (
+                      <span key={delay} className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: `${delay}ms` }} />
+                    ))}
+                  </span>
+                  <span>{cloneStatus}</span>
+                </div>
+              )}
+              <div className="flex gap-2 justify-end pt-2">
+                <button
+                  onClick={() => { setShowCloneModal(false); setCloneError(''); setCloneStatus('') }}
+                  disabled={cloning}
+                  className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleClone}
+                  disabled={cloning || !cloneUrl.trim()}
+                  className="px-5 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
+                >
+                  {cloning ? 'Cloning…' : 'Clone Website'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
