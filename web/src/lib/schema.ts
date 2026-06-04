@@ -4,9 +4,10 @@ import {
   text,
   integer,
 } from 'drizzle-orm/sqlite-core'
+import { randomUUID } from 'crypto'
 
 export const users = sqliteTable('users', {
-  id: text('id').primaryKey(),
+  id: text('id').primaryKey().$defaultFn(() => randomUUID()),
   name: text('name'),
   email: text('email').notNull().unique(),
   emailVerified: integer('email_verified', { mode: 'timestamp' }),
@@ -22,7 +23,7 @@ export const users = sqliteTable('users', {
 })
 
 export const accounts = sqliteTable('accounts', {
-  id: text('id').primaryKey(),
+  id: text('id').primaryKey().$defaultFn(() => randomUUID()),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   type: text('type').notNull(),
   provider: text('provider').notNull(),
@@ -37,7 +38,7 @@ export const accounts = sqliteTable('accounts', {
 })
 
 export const sessions = sqliteTable('sessions', {
-  id: text('id').primaryKey(),
+  id: text('id').primaryKey().$defaultFn(() => randomUUID()),
   sessionToken: text('session_token').notNull().unique(),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   expires: integer('expires', { mode: 'timestamp' }).notNull(),
