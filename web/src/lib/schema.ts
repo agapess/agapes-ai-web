@@ -13,7 +13,7 @@ export const users = sqliteTable('users', {
   emailVerified: integer('email_verified', { mode: 'timestamp' }),
   image: text('image'),
   role: text('role', { enum: ['user', 'admin'] }).notNull().default('user'),
-  credits: integer('credits').notNull().default(0),
+  credits: integer('credits').notNull().default(100),
   plan: text('plan', { enum: ['free', 'pro', 'enterprise'] }).notNull().default('free'),
   stripeCustomerId: text('stripe_customer_id'),
   passwordHash: text('password_hash'),
