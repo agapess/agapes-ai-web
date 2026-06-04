@@ -1,6 +1,8 @@
 import Database from 'better-sqlite3'
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import * as schema from './schema'
+import { existsSync, mkdirSync } from 'fs'
+import { dirname } from 'path'
 
 const DATABASE_URL = process.env.DATABASE_URL ?? 'file:./data/db.sqlite'
 const dbPath = DATABASE_URL.replace(/^file:/, '')
@@ -13,6 +15,11 @@ declare global {
 }
 
 function createDb(): DB {
+  // Ensure the directory exists (handles Docker volume mounts)
+  const dir = dirname(dbPath)
+  if (dir && dir !== '.' && !existsSync(dir)) {
+    mkdirSync(dir, { recursive: true })
+  }
   const sqlite = new Database(dbPath)
   sqlite.pragma('journal_mode = WAL')
   sqlite.pragma('foreign_keys = ON')
