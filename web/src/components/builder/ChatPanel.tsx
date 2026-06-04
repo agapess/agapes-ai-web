@@ -357,14 +357,18 @@ export default function ChatPanel() {
       const decoder = new TextDecoder()
       let success = false
       let lastGeneratedCode: string | undefined
+      let sseBuffer = ''
 
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
 
-        const lines = decoder.decode(value, { stream: true })
-          .split('\n')
-          .filter(l => l.startsWith('data: '))
+        sseBuffer += decoder.decode(value, { stream: true })
+        const parts = sseBuffer.split('\n')
+        // Keep the last part in buffer (it might be incomplete)
+        sseBuffer = parts.pop() ?? ''
+
+        const lines = parts.filter(l => l.startsWith('data: '))
 
         for (const line of lines) {
           try {
@@ -404,6 +408,43 @@ export default function ChatPanel() {
               finalizeStreamingMessage()
             }
           } catch { /* skip malformed */ }
+        }
+      }
+
+      // Process any remaining data in the buffer after stream ends
+      if (sseBuffer.trim()) {
+        const remaining = sseBuffer.split('\n').filter(l => l.startsWith('data: '))
+        for (const line of remaining) {
+          try {
+            const event = JSON.parse(line.slice(6))
+            if (event.type === 'preview_update') {
+              lastGeneratedCode = event.code
+              setPreviewCode(event.code)
+              setActivePreviewTab('preview')
+              if (currentActivePage && currentProject) {
+                updatePageContent(currentActivePage.id, event.code)
+                fetch(`/api/pages/${currentProject.id}/${currentActivePage.id}`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ content: event.code }),
+                }).catch(() => {})
+              }
+            } else if (event.type === 'done') {
+              success = true
+              finalizeStreamingMessage(lastGeneratedCode)
+              if (lastGeneratedCode && currentProject && currentActivePage) {
+                fetch(`/api/history/${currentProject.id}`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    pageId: currentActivePage.id,
+                    content: lastGeneratedCode,
+                    description: `AI: ${content.slice(0, 60)}${content.length > 60 ? '…' : ''}`,
+                  }),
+                }).catch(() => {})
+              }
+            }
+          } catch { /* skip */ }
         }
       }
 
