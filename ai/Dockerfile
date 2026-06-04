@@ -22,10 +22,9 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=builder /app/ai/dist ./dist
 COPY --from=builder /app/shared/dist ./shared/dist
-COPY --from=builder /app/ai/package.json ./package.json
+COPY --from=builder /app/ai/package.json ./ai/package.json
 COPY --from=builder /app/shared/package.json ./shared/package.json
-COPY pnpm-workspace.yaml ./
-COPY pnpm-lock.yaml ./
-RUN pnpm install --prod --frozen-lockfile
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+RUN pnpm install --prod --no-frozen-lockfile --filter ai
 EXPOSE 4001
 CMD ["node", "dist/index.js"]
