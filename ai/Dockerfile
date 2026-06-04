@@ -23,6 +23,7 @@ ENV NODE_ENV=production
 COPY --from=builder /app/ai/dist ./dist
 COPY --from=builder /app/shared/dist ./shared/dist
 COPY --from=builder /app/ai/package.json ./package.json
-RUN npm install --omit=dev
+# Remove workspace: protocol dep (shared is already compiled and copied above)
+RUN sed -i '/"@ai-builder\/shared"/d' package.json && npm install --omit=dev
 EXPOSE 4001
 CMD ["node", "dist/index.js"]
