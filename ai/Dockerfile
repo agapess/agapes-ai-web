@@ -25,5 +25,9 @@ COPY --from=builder /app/shared/dist ./shared/dist
 COPY --from=builder /app/ai/package.json ./package.json
 # Remove workspace: protocol dep (shared is already compiled and copied above)
 RUN sed -i '/"@ai-builder\/shared"/d' package.json && npm install --omit=dev
+# Place shared package in node_modules so Node resolves @ai-builder/shared
+RUN mkdir -p node_modules/@ai-builder/shared/dist
+COPY --from=builder /app/shared/package.json ./node_modules/@ai-builder/shared/package.json
+COPY --from=builder /app/shared/dist ./node_modules/@ai-builder/shared/dist
 EXPOSE 4001
 CMD ["node", "dist/index.js"]
