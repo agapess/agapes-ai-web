@@ -26,5 +26,17 @@ function createDb(): DB {
   return drizzle(sqlite, { schema })
 }
 
-export const db: DB = globalThis.__db ?? createDb()
-if (process.env.NODE_ENV !== 'production') globalThis.__db = db
+// Use a lazy getter so the DB connection is only created on first access
+// This prevents "database is locked" errors during Next.js build when
+// multiple routes are pre-rendered in parallel
+let _db: DB | undefined = globalThis.__db
+
+export const db: DB = new Proxy({} as DB, {
+  get(_target, prop) {
+    if (!_db) {
+      _db = createDb()
+      if (process.env.NODE_ENV !== 'production') globalThis.__db = _db
+    }
+    return (_db as any)[prop]
+  },
+})
