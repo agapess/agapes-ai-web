@@ -11,12 +11,16 @@ chatRouter.post('/stream', async (req: Request, res: Response) => {
   }
 
   const { projectId, message, history, providerConfig, projectContext, customInstructions } = parsed.data
+  // brandSettings is not in the shared schema but passed by the web service
+  const brandSettings = req.body.brandSettings as {
+    primaryColor?: string; fontFamily?: string; borderRadius?: 'sharp' | 'rounded' | 'pill'; navCode?: string
+  } | undefined
 
   res.setHeader('Content-Type', 'text/event-stream')
   res.setHeader('Cache-Control', 'no-cache')
   res.setHeader('Connection', 'keep-alive')
   res.flushHeaders()
 
-  await orchestrate({ projectId, message, history: history ?? [], providerConfig, projectContext, customInstructions }, res)
+  await orchestrate({ projectId, message, history: history ?? [], providerConfig, projectContext, customInstructions, brandSettings }, res)
   res.end()
 })

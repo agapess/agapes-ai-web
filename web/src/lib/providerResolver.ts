@@ -74,11 +74,17 @@ export function resolveProvider(userId: string, userPlan: string, preferredProvi
     const baseUrlMap: Record<string, string | undefined> = {
       ollama: process.env.OLLAMA_BASE_URL,
       lmstudio: process.env.LMSTUDIO_BASE_URL,
+      openrouter: 'https://openrouter.ai/api/v1',
+    }
+    const apiKeyMap: Record<string, string | undefined> = {
+      openrouter: process.env.OPENROUTER_API_KEY,
+      openai: process.env.OPENAI_API_KEY,
+      claude: process.env.CLAUDE_API_KEY ?? process.env.ANTHROPIC_API_KEY,
     }
     return {
       provider: envProvider,
       baseUrl: baseUrlMap[envProvider] ?? undefined,
-      apiKey: undefined,
+      apiKey: apiKeyMap[envProvider] ?? undefined,
       model: envModel ?? undefined,
       creditCost: 0,
     }

@@ -55,12 +55,39 @@ export async function orchestrate(req: OrchestratorRequest, res: Response, maxRe
     })
 
     let accumulated = ''
+    let insideThink = false
 
     try {
       for await (const chunk of adapter.stream({ messages, model: req.providerConfig?.model ?? '' })) {
         if (chunk.type === 'text_delta') {
           accumulated += chunk.content
-          sendEvent(res, chunk)
+
+          // Filter out <think>...</think> content from what we send to the user
+          let toSend = chunk.content
+          if (insideThink) {
+            const closeIdx = toSend.indexOf('</think>')
+            if (closeIdx !== -1) {
+              insideThink = false
+              toSend = toSend.slice(closeIdx + 8)
+            } else {
+              toSend = ''
+            }
+          }
+          if (!insideThink && toSend.includes('<think>')) {
+            const openIdx = toSend.indexOf('<think>')
+            const before = toSend.slice(0, openIdx)
+            const after = toSend.slice(openIdx + 7)
+            const closeIdx = after.indexOf('</think>')
+            if (closeIdx !== -1) {
+              toSend = before + after.slice(closeIdx + 8)
+            } else {
+              insideThink = true
+              toSend = before
+            }
+          }
+          if (toSend) {
+            sendEvent(res, { type: 'text_delta', content: toSend })
+          }
         } else if (chunk.type === 'error') {
           sendEvent(res, chunk)
           return
