@@ -22,6 +22,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=builder /app/ai/dist ./dist
 COPY --from=builder /app/shared/dist ./shared/dist
-COPY --from=builder /app/ai/node_modules ./node_modules
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/ai/node_modules ./ai/node_modules
+COPY --from=builder /app/ai/package.json ./package.json
 EXPOSE 4001
 CMD ["node", "dist/index.js"]
