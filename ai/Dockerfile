@@ -18,13 +18,15 @@ RUN pnpm --filter @ai-builder/shared build
 RUN pnpm --filter ai build
 
 FROM base AS runner
-WORKDIR /app
+WORKDIR /app/ai
 ENV NODE_ENV=production
+COPY --from=builder /app/ai/package.json ./package.json
+COPY --from=builder /app/shared/package.json ../shared/package.json
+COPY --from=builder /app/package.json ../package.json
+COPY --from=builder /app/pnpm-workspace.yaml ../pnpm-workspace.yaml
+COPY --from=builder /app/pnpm-lock.yaml ../pnpm-lock.yaml
+RUN cd /app && pnpm install --prod --no-frozen-lockfile --filter ai
 COPY --from=builder /app/ai/dist ./dist
-COPY --from=builder /app/shared/dist ./shared/dist
-COPY --from=builder /app/ai/package.json ./ai/package.json
-COPY --from=builder /app/shared/package.json ./shared/package.json
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
-RUN pnpm install --prod --no-frozen-lockfile --filter ai
+COPY --from=builder /app/shared/dist ../shared/dist
 EXPOSE 4001
 CMD ["node", "dist/index.js"]
