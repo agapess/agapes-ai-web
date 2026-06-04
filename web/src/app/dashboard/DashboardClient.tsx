@@ -67,7 +67,7 @@ interface Project {
 
 interface Props {
   initialProjects: Project[]
-  user: { id: string; name: string | null; email: string; credits: number; plan: string }
+  user: { id: string; name: string | null; email: string; credits: number; plan: string; role?: string }
 }
 
 function formatRelativeTime(date: Date | null): string {
@@ -237,11 +237,77 @@ export default function DashboardClient({ initialProjects, user }: Props) {
     })
   , [projects])
 
+  // ── Admin panel state ───────────────────────────────────────────────────────
+  const isAdmin = user.role === 'admin'
+  const [showAdmin, setShowAdmin] = useState(false)
+  const [adminUsers, setAdminUsers] = useState<Array<{ id: string; name: string | null; email: string; role: string; credits: number; plan: string; createdAt: number | null }>>([])
+  const [adminProviders, setAdminProviders] = useState<Array<{ id: string; provider: string; displayName: string; model: string | null; isDefault: boolean; isActive: boolean }>>([])
+  const [loadingAdmin, setLoadingAdmin] = useState(false)
+  const [editingCredits, setEditingCredits] = useState<{ id: string; value: string } | null>(null)
+
+  async function loadAdminData() {
+    setLoadingAdmin(true)
+    const [usersRes, providersRes] = await Promise.all([
+      fetch('/api/admin/users'),
+      fetch('/api/admin/providers'),
+    ])
+    if (usersRes.ok) {
+      const data = await usersRes.json()
+      setAdminUsers(data.users ?? [])
+    }
+    if (providersRes.ok) {
+      const data = await providersRes.json()
+      setAdminProviders(data.configs ?? [])
+    }
+    setLoadingAdmin(false)
+  }
+
+  function toggleAdmin() {
+    if (!showAdmin) loadAdminData()
+    setShowAdmin(o => !o)
+  }
+
+  async function updateUserCredits(userId: string, credits: number) {
+    await fetch(`/api/admin/users/${userId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ credits }),
+    })
+    setEditingCredits(null)
+    loadAdminData()
+  }
+
+  async function updateUserRole(userId: string, role: string) {
+    await fetch(`/api/admin/users/${userId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role }),
+    })
+    loadAdminData()
+  }
+
+  async function updateUserPlan(userId: string, plan: string) {
+    await fetch(`/api/admin/users/${userId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plan }),
+    })
+    loadAdminData()
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-border px-6 py-4 flex items-center justify-between">
         <h1 className="text-xl font-bold text-foreground">✦ Agapes AI Website</h1>
         <div className="flex items-center gap-4">
+          {isAdmin && (
+            <button
+              onClick={toggleAdmin}
+              className={`text-sm transition-colors ${showAdmin ? 'text-primary font-medium' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              ⚡ Admin
+            </button>
+          )}
           <button
             onClick={() => setShowCloneModal(true)}
             className="text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -277,6 +343,107 @@ export default function DashboardClient({ initialProjects, user }: Props) {
       </header>
 
       <main className="max-w-6xl mx-auto px-6 py-8">
+        {/* ── Admin Panel ──────────────────────────────────────────────────── */}
+        {isAdmin && showAdmin && (
+          <div className="mb-8 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold text-foreground flex items-center gap-2">⚡ Admin Panel</h2>
+              <button onClick={() => setShowAdmin(false)} className="text-xs text-muted-foreground hover:text-foreground">Close ✕</button>
+            </div>
+
+            {loadingAdmin ? (
+              <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Users table */}
+                <div className="bg-card border border-border rounded-xl overflow-hidden">
+                  <div className="px-4 py-3 border-b border-border bg-secondary/30">
+                    <h3 className="text-sm font-semibold text-foreground">Users ({adminUsers.length})</h3>
+                  </div>
+                  <div className="divide-y divide-border max-h-80 overflow-y-auto">
+                    {adminUsers.map(u => (
+                      <div key={u.id} className="px-4 py-3 flex items-center gap-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">{u.name || u.email}</p>
+                          <p className="text-[10px] text-muted-foreground">{u.email}</p>
+                        </div>
+                        {/* Role */}
+                        <select
+                          value={u.role}
+                          onChange={e => updateUserRole(u.id, e.target.value)}
+                          className="text-[10px] px-1.5 py-0.5 bg-secondary border border-border rounded text-foreground"
+                        >
+                          <option value="user">user</option>
+                          <option value="admin">admin</option>
+                        </select>
+                        {/* Plan */}
+                        <select
+                          value={u.plan}
+                          onChange={e => updateUserPlan(u.id, e.target.value)}
+                          className="text-[10px] px-1.5 py-0.5 bg-secondary border border-border rounded text-foreground"
+                        >
+                          <option value="free">free</option>
+                          <option value="pro">pro</option>
+                          <option value="enterprise">enterprise</option>
+                        </select>
+                        {/* Credits */}
+                        {editingCredits?.id === u.id ? (
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              value={editingCredits.value}
+                              onChange={e => setEditingCredits({ id: u.id, value: e.target.value })}
+                              className="w-16 px-1.5 py-0.5 bg-secondary border border-border rounded text-[10px] text-foreground"
+                              autoFocus
+                              onKeyDown={e => { if (e.key === 'Enter') updateUserCredits(u.id, Number(editingCredits.value)) }}
+                            />
+                            <button onClick={() => updateUserCredits(u.id, Number(editingCredits.value))} className="text-[10px] text-green-400 hover:text-green-300">✓</button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setEditingCredits({ id: u.id, value: String(u.credits) })}
+                            className="text-[10px] px-1.5 py-0.5 bg-primary/10 text-primary rounded hover:bg-primary/20 transition-colors"
+                            title="Edit credits"
+                          >
+                            {u.credits} cr
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Providers table */}
+                <div className="bg-card border border-border rounded-xl overflow-hidden">
+                  <div className="px-4 py-3 border-b border-border bg-secondary/30 flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-foreground">Platform Providers ({adminProviders.length})</h3>
+                    <Link href="/admin/providers" className="text-[10px] text-primary hover:underline">Manage →</Link>
+                  </div>
+                  <div className="divide-y divide-border max-h-80 overflow-y-auto">
+                    {adminProviders.length === 0 ? (
+                      <div className="px-4 py-6 text-center">
+                        <p className="text-xs text-muted-foreground">No platform providers configured.</p>
+                        <Link href="/admin/providers" className="text-xs text-primary hover:underline mt-1 inline-block">+ Add Provider</Link>
+                      </div>
+                    ) : adminProviders.map(p => (
+                      <div key={p.id} className="px-4 py-3 flex items-center gap-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground">{p.displayName}</p>
+                          <p className="text-[10px] text-muted-foreground">{p.provider} · {p.model ?? 'default'}</p>
+                        </div>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${p.isActive ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+                          {p.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                        {p.isDefault && <span className="text-[10px] px-1.5 py-0.5 bg-primary/10 text-primary rounded">Default</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-semibold text-foreground">Your Projects</h2>
           <div className="flex gap-2">
