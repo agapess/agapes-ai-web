@@ -8,9 +8,12 @@ import * as schema from './schema'
 import { eq } from 'drizzle-orm'
 
 export const authOptions: NextAuthOptions = {
-  // Pass db directly — DrizzleAdapter auto-detects SQLite and uses default table names.
-  // The schema column names match what the adapter expects at the DB level (snake_case).
-  adapter: DrizzleAdapter(db) as NextAuthOptions['adapter'],
+  adapter: DrizzleAdapter(db, {
+    usersTable: schema.users as any,
+    accountsTable: schema.accounts as any,
+    sessionsTable: schema.sessions as any,
+    verificationTokensTable: schema.verificationTokens as any,
+  }) as NextAuthOptions['adapter'],
   session: { strategy: 'jwt' },
   pages: {
     signIn: '/login',
