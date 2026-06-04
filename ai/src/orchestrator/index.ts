@@ -103,6 +103,10 @@ export async function orchestrate(req: OrchestratorRequest, res: Response, maxRe
     const code = extractCode(accumulated)
 
     if (!code) {
+      // Debug: log the last 500 chars of the accumulated response to diagnose extraction failure
+      console.error('[extractCode] FAILED — no code found. Accumulated length:', accumulated.length)
+      console.error('[extractCode] Last 500 chars:', accumulated.slice(-500))
+      console.error('[extractCode] First 500 chars:', accumulated.slice(0, 500))
       lastError = 'No code block found in response'
       if (attempt < maxRetries) continue
       sendEvent(res, { type: 'done' })
