@@ -4,9 +4,10 @@ import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { projects } from '@/lib/schema'
 import { and, eq } from 'drizzle-orm'
-import { writeFile, mkdir, readdir, stat } from 'fs/promises'
+import { writeFile, mkdir, readdir, stat, access } from 'fs/promises'
 import { join } from 'path'
 import { randomUUID } from 'crypto'
+import { existsSync } from 'fs'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,6 +21,14 @@ const ALLOWED_TYPES: Record<string, string> = {
   'image/webp': 'webp',
   'image/svg+xml': 'svg',
   'image/avif': 'avif',
+}
+
+// In Docker standalone mode, Next.js serves from /app/web/public
+// In local dev, it's process.cwd()/public
+function getPublicDir(): string {
+  const standalonePublic = join(process.cwd(), 'web', 'public')
+  if (existsSync(standalonePublic)) return standalonePublic
+  return join(process.cwd(), 'public')
 }
 
 /**
@@ -71,7 +80,7 @@ export async function POST(
   const filename = `${randomUUID()}.${ext}`
 
   // Store under public/uploads/<projectId>/
-  const uploadDir = join(process.cwd(), 'public', 'uploads', params.projectId)
+  const uploadDir = join(getPublicDir(), 'uploads', params.projectId)
   await mkdir(uploadDir, { recursive: true })
 
   const bytes = await file.arrayBuffer()
@@ -104,7 +113,7 @@ export async function GET(
     return NextResponse.json({ error: 'Project not found' }, { status: 404 })
   }
 
-  const uploadDir = join(process.cwd(), 'public', 'uploads', params.projectId)
+  const uploadDir = join(getPublicDir(), 'uploads', params.projectId)
 
   try {
     const files = await readdir(uploadDir)
